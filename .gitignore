@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated at install-time by scripts/copy-vad-assets.mjs
+/public/vad/
