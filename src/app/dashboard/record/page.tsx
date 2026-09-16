@@ -37,7 +37,14 @@ export default function RecordPage() {
       keepAliveIntervalRef.current = null;
     }
     if (vadRef.current) {
-      await vadRef.current.destroy();
+      try {
+        await vadRef.current.destroy();
+      } catch (err) {
+        // MicVAD.destroy() throws if start() never finished successfully
+        // (e.g. the mic/token/socket setup failed first). That's expected
+        // here and must not hide the real error from the caller.
+        console.warn("MicVAD destroy skipped (was not fully started):", err);
+      }
       vadRef.current = null;
     }
     if (socketRef.current) {
