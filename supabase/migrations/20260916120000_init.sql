@@ -15,13 +15,25 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
+-- Postgres has no "create policy if not exists", so each policy is dropped
+-- first to keep this migration re-runnable after a partial failure.
+drop policy if exists "Profiles are viewable by their owner" on public.profiles;
 create policy "Profiles are viewable by their owner"
   on public.profiles for select
   using (auth.uid() = id);
 
+drop policy if exists "Profiles are editable by their owner" on public.profiles;
 create policy "Profiles are editable by their owner"
   on public.profiles for update
   using (auth.uid() = id);
+
+-- handle_new_user() is security definer and so bypasses RLS, but without an
+-- insert policy nothing else can ever create a profile — and notes.user_id
+-- depends on one existing.
+drop policy if exists "Profiles are insertable by their owner" on public.profiles;
+create policy "Profiles are insertable by their owner"
+  on public.profiles for insert
+  with check (auth.uid() = id);
 
 -- Auto-create a profile row whenever a new auth user signs up (e.g. via Google OAuth).
 create or replace function public.handle_new_user()
@@ -58,6 +70,7 @@ create table if not exists public.subjects (
 
 alter table public.subjects enable row level security;
 
+drop policy if exists "Users manage their own subjects" on public.subjects;
 create policy "Users manage their own subjects"
   on public.subjects for all
   using (auth.uid() = user_id)
@@ -78,6 +91,7 @@ create table if not exists public.notes (
 
 alter table public.notes enable row level security;
 
+drop policy if exists "Users manage their own notes" on public.notes;
 create policy "Users manage their own notes"
   on public.notes for all
   using (auth.uid() = user_id)
