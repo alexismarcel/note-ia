@@ -1,7 +1,69 @@
 import { NextResponse } from "next/server";
+import https from "node:https";
+import crypto from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+
+// Must stay identical to the query params /dashboard/record uses to open
+// the real streaming socket, so the probe below fails/succeeds the same
+// way the browser's connection would.
+const LISTEN_PARAMS = new URLSearchParams({
+  model: "nova-2",
+  language: "fr",
+  smart_format: "true",
+  interim_results: "true",
+  encoding: "linear16",
+  sample_rate: "16000",
+  channels: "1",
+  endpointing: "300",
+});
+
+// The browser's WebSocket API never exposes the HTTP status/body of a
+// failed handshake (it only ever sees close code 1006), which makes
+// misconfiguration (bad token scope, disabled model, wrong params, plan
+// limits) undiagnosable from the client. Node's http client isn't bound by
+// that restriction, so probe the exact same handshake here and surface
+// whatever Deepgram actually said.
+function probeDeepgramSocket(
+  accessToken: string
+): Promise<{ ok: true } | { ok: false; detail: string }> {
+  return new Promise((resolve) => {
+    const req = https.request({
+      hostname: "api.deepgram.com",
+      path: `/v1/listen?${LISTEN_PARAMS}`,
+      headers: {
+        Connection: "Upgrade",
+        Upgrade: "websocket",
+        "Sec-WebSocket-Version": "13",
+        "Sec-WebSocket-Key": crypto.randomBytes(16).toString("base64"),
+        "Sec-WebSocket-Protocol": `token, ${accessToken}`,
+      },
+    });
+
+    req.on("upgrade", (res) => {
+      resolve({ ok: true });
+      res.socket.destroy();
+    });
+
+    req.on("response", (res) => {
+      let body = "";
+      res.on("data", (chunk) => (body += chunk));
+      res.on("end", () => {
+        resolve({
+          ok: false,
+          detail: `HTTP ${res.statusCode} ${res.statusMessage}${body ? `: ${body}` : ""}`,
+        });
+      });
+    });
+
+    req.on("error", (err) => {
+      resolve({ ok: false, detail: err.message });
+    });
+
+    req.end();
+  });
+}
 
 // Mints a short-lived Deepgram access token so the browser never sees the
 // permanent DEEPGRAM_API_KEY. The client uses this token once to
@@ -48,6 +110,16 @@ export async function POST() {
     // handshake with a token of "undefined".
     return NextResponse.json(
       { error: `deepgram_grant_unexpected_response: ${JSON.stringify(data)}` },
+      { status: 502 }
+    );
+  }
+
+  const probe = await probeDeepgramSocket(data.access_token);
+  if (!probe.ok) {
+    // The grant succeeded but the actual streaming handshake wouldn't —
+    // this is the real cause the browser's 1006 close code can't show.
+    return NextResponse.json(
+      { error: `deepgram_socket_probe_failed: ${probe.detail}` },
       { status: 502 }
     );
   }
