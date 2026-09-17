@@ -262,6 +262,9 @@ export default function RecordPage() {
       if (error) throw error;
 
       router.push("/dashboard");
+      // Without this the dashboard can be served from the client cache,
+      // re-rendering the list as it was before this note existed.
+      router.refresh();
     } catch (err) {
       setErrorMessage(toErrorMessage(err));
       setStatus("stopped");
