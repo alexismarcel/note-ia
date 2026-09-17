@@ -17,6 +17,25 @@ type Status =
 const KEEPALIVE_INTERVAL_MS = 5000;
 const PRE_BUFFER_FRAMES = 5;
 
+// Supabase rejections are PostgrestError — a plain object, not an Error — so
+// `instanceof Error` silently discards the only useful diagnostic and leaves
+// the user with "Erreur inconnue".
+function toErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    const { message, code, details, hint } = err as {
+      message?: string;
+      code?: string;
+      details?: string;
+      hint?: string;
+    };
+    return [message, code && `(${code})`, details, hint]
+      .filter(Boolean)
+      .join(" ");
+  }
+  return "Erreur inconnue";
+}
+
 export default function RecordPage() {
   const router = useRouter();
   const [status, setStatus] = useState<Status>("idle");
@@ -214,7 +233,7 @@ export default function RecordPage() {
       setStatus("listening");
     } catch (err) {
       await cleanup();
-      setErrorMessage(err instanceof Error ? err.message : "Erreur inconnue");
+      setErrorMessage(toErrorMessage(err));
       setStatus("error");
     }
   }, [cleanup, sendFrame]);
@@ -244,7 +263,7 @@ export default function RecordPage() {
 
       router.push("/dashboard");
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Erreur inconnue");
+      setErrorMessage(toErrorMessage(err));
       setStatus("stopped");
     }
   }, [finalTranscript, router]);
