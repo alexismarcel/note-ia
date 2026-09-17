@@ -159,14 +159,13 @@ export default function RecordPage() {
           }, KEEPALIVE_INTERVAL_MS);
           resolve();
         };
-        // Browsers never expose the HTTP status/body of a failed WS
-        // handshake, but the close code (e.g. 1006, 1008) at least
-        // distinguishes "never connected" from a clean shutdown, and
-        // shows up if onerror doesn't fire in every browser.
+        // For a failed handshake, browsers fire `error` *before* `close`,
+        // and `error` carries no status/body — only `close` exposes the
+        // code (e.g. 1006, 1008), which is the only diagnostic signal we
+        // get. So `error` must NOT settle the promise itself, or it wins
+        // the race and permanently hides the code `close` would report.
         socket.onerror = () => {
-          if (settled) return;
-          settled = true;
-          reject(new Error("Deepgram WebSocket connection failed (handshake error)"));
+          console.warn("Deepgram WebSocket error event (see close code below)");
         };
         socket.onclose = (event) => {
           if (keepAliveIntervalRef.current !== null) {
