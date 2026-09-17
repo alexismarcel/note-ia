@@ -65,6 +65,37 @@ function probeDeepgramSocket(
   });
 }
 
+async function grantAccessToken(
+  apiKey: string
+): Promise<{ ok: true; data: { access_token: string } } | { ok: false; error: string }> {
+  const response = await fetch("https://api.deepgram.com/v1/auth/grant", {
+    method: "POST",
+    headers: {
+      Authorization: `Token ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ttl_seconds: 30 }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    return { ok: false, error: `deepgram_grant_failed: ${response.status} ${text}` };
+  }
+
+  const data = await response.json();
+  if (typeof data.access_token !== "string" || !data.access_token) {
+    // Deepgram returned 200 but not the shape we expect — surface the raw
+    // body instead of letting the client silently fail at the WebSocket
+    // handshake with a token of "undefined".
+    return {
+      ok: false,
+      error: `deepgram_grant_unexpected_response: ${JSON.stringify(data)}`,
+    };
+  }
+
+  return { ok: true, data: data as { access_token: string } };
+}
+
 // Mints a short-lived Deepgram access token so the browser never sees the
 // permanent DEEPGRAM_API_KEY. The client uses this token once to
 // authenticate the streaming WebSocket (see /dashboard/record).
@@ -86,43 +117,30 @@ export async function POST() {
     );
   }
 
-  const response = await fetch("https://api.deepgram.com/v1/auth/grant", {
-    method: "POST",
-    headers: {
-      Authorization: `Token ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ ttl_seconds: 30 }),
-  });
+  // Two independent grants: Deepgram's short-lived tokens are meant for a
+  // single connection, so probing with the same token the client will use
+  // would consume it and make the client's own connection fail right after
+  // — a self-inflicted 1006 that looks identical to a real config problem.
+  const [clientGrant, probeGrant] = await Promise.all([
+    grantAccessToken(apiKey),
+    grantAccessToken(apiKey),
+  ]);
 
-  if (!response.ok) {
-    const text = await response.text();
-    return NextResponse.json(
-      { error: `deepgram_grant_failed: ${response.status} ${text}` },
-      { status: 502 }
-    );
+  if (!clientGrant.ok) {
+    return NextResponse.json({ error: clientGrant.error }, { status: 502 });
   }
 
-  const data = await response.json();
-  if (typeof data.access_token !== "string" || !data.access_token) {
-    // Deepgram returned 200 but not the shape we expect — surface the raw
-    // body instead of letting the client silently fail at the WebSocket
-    // handshake with a token of "undefined".
-    return NextResponse.json(
-      { error: `deepgram_grant_unexpected_response: ${JSON.stringify(data)}` },
-      { status: 502 }
-    );
+  if (probeGrant.ok) {
+    const probe = await probeDeepgramSocket(probeGrant.data.access_token);
+    if (!probe.ok) {
+      // The grant succeeded but the actual streaming handshake wouldn't —
+      // this is the real cause the browser's 1006 close code can't show.
+      return NextResponse.json(
+        { error: `deepgram_socket_probe_failed: ${probe.detail}` },
+        { status: 502 }
+      );
+    }
   }
 
-  const probe = await probeDeepgramSocket(data.access_token);
-  if (!probe.ok) {
-    // The grant succeeded but the actual streaming handshake wouldn't —
-    // this is the real cause the browser's 1006 close code can't show.
-    return NextResponse.json(
-      { error: `deepgram_socket_probe_failed: ${probe.detail}` },
-      { status: 502 }
-    );
-  }
-
-  return NextResponse.json(data);
+  return NextResponse.json(clientGrant.data);
 }
