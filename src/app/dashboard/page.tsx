@@ -44,7 +44,10 @@ export default async function DashboardPage() {
         <ul className="mt-6 flex flex-col gap-3">
           {notes.map((note) => (
             <li key={note.id}>
-              <article className="rounded-md border border-gray-200 p-4">
+              <Link
+                href={`/dashboard/notes/${note.id}`}
+                className="block rounded-md border border-gray-200 p-4 hover:border-gray-400"
+              >
                 <h2 className="font-medium">{note.title}</h2>
                 <time
                   dateTime={note.created_at}
@@ -61,7 +64,7 @@ export default async function DashboardPage() {
                     {note.content}
                   </p>
                 )}
-              </article>
+              </Link>
             </li>
           ))}
         </ul>
