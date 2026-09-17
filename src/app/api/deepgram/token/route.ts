@@ -42,5 +42,15 @@ export async function POST() {
   }
 
   const data = await response.json();
+  if (typeof data.access_token !== "string" || !data.access_token) {
+    // Deepgram returned 200 but not the shape we expect — surface the raw
+    // body instead of letting the client silently fail at the WebSocket
+    // handshake with a token of "undefined".
+    return NextResponse.json(
+      { error: `deepgram_grant_unexpected_response: ${JSON.stringify(data)}` },
+      { status: 502 }
+    );
+  }
+
   return NextResponse.json(data);
 }

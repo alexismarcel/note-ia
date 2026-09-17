@@ -125,7 +125,13 @@ export default function RecordPage() {
         const body = await tokenRes.json().catch(() => ({}));
         throw new Error(body.error ?? `token request failed (${tokenRes.status})`);
       }
-      const { access_token: accessToken } = await tokenRes.json();
+      const tokenBody = await tokenRes.json();
+      const accessToken: unknown = tokenBody.access_token;
+      if (typeof accessToken !== "string" || !accessToken) {
+        throw new Error(
+          `Deepgram token response missing access_token: ${JSON.stringify(tokenBody)}`
+        );
+      }
 
       const params = new URLSearchParams({
         model: "nova-2",
@@ -139,11 +145,13 @@ export default function RecordPage() {
       });
 
       await new Promise<void>((resolve, reject) => {
+        let settled = false;
         const socket = new WebSocket(
           `wss://api.deepgram.com/v1/listen?${params}`,
           ["token", accessToken]
         );
         socket.onopen = () => {
+          settled = true;
           keepAliveIntervalRef.current = window.setInterval(() => {
             if (socket.readyState === WebSocket.OPEN) {
               socket.send(JSON.stringify({ type: "KeepAlive" }));
@@ -151,11 +159,29 @@ export default function RecordPage() {
           }, KEEPALIVE_INTERVAL_MS);
           resolve();
         };
-        socket.onerror = () => reject(new Error("Deepgram WebSocket connection failed"));
-        socket.onclose = () => {
+        // Browsers never expose the HTTP status/body of a failed WS
+        // handshake, but the close code (e.g. 1006, 1008) at least
+        // distinguishes "never connected" from a clean shutdown, and
+        // shows up if onerror doesn't fire in every browser.
+        socket.onerror = () => {
+          if (settled) return;
+          settled = true;
+          reject(new Error("Deepgram WebSocket connection failed (handshake error)"));
+        };
+        socket.onclose = (event) => {
           if (keepAliveIntervalRef.current !== null) {
             window.clearInterval(keepAliveIntervalRef.current);
             keepAliveIntervalRef.current = null;
+          }
+          if (!settled) {
+            settled = true;
+            reject(
+              new Error(
+                `Deepgram WebSocket closed before opening (code ${event.code}${
+                  event.reason ? `: ${event.reason}` : ""
+                })`
+              )
+            );
           }
         };
         socket.onmessage = (event) => {
