@@ -37,7 +37,7 @@ function probeDeepgramSocket(
         Upgrade: "websocket",
         "Sec-WebSocket-Version": "13",
         "Sec-WebSocket-Key": crypto.randomBytes(16).toString("base64"),
-        "Sec-WebSocket-Protocol": `token, ${accessToken}`,
+        "Sec-WebSocket-Protocol": `bearer, ${accessToken}`,
       },
     });
 

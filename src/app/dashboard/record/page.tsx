@@ -146,9 +146,13 @@ export default function RecordPage() {
 
       await new Promise<void>((resolve, reject) => {
         let settled = false;
+        // "bearer" (not "token") is the scheme for the short-lived tokens
+        // /v1/auth/grant returns; "token" is only for permanent API keys,
+        // and mixing them up is rejected at the handshake as a 401 the
+        // browser can only ever report as close code 1006.
         const socket = new WebSocket(
           `wss://api.deepgram.com/v1/listen?${params}`,
-          ["token", accessToken]
+          ["bearer", accessToken]
         );
         socket.onopen = () => {
           settled = true;
