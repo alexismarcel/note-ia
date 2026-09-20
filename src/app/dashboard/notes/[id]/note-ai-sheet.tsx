@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toErrorMessage } from "@/lib/errors";
@@ -18,7 +18,13 @@ export default function NoteAiSheet({ noteId, initialSheet }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [savedSheet, setSavedSheet] = useState(initialSheet);
 
+  // `disabled` only takes effect on the next render, leaving a window where a
+  // fast double-click fires two billed requests. A ref closes it synchronously.
+  const inFlight = useRef(false);
+
   const generate = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setError(null);
     setIsGenerating(true);
     try {
@@ -33,6 +39,7 @@ export default function NoteAiSheet({ noteId, initialSheet }: Props) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur inconnue");
     } finally {
+      inFlight.current = false;
       setIsGenerating(false);
     }
   };

@@ -57,11 +57,24 @@ export async function POST(
 
   try {
     const message = await client.messages.create({
-      model: "claude-opus-5",
-      max_tokens: 16000,
+      model: "claude-sonnet-5",
+      // Thinking tokens bill at the output rate and dominated the cost here:
+      // structuring a transcript needs little reasoning, so cap the effort
+      // rather than paying for high-effort thinking on every note.
+      output_config: { effort: "low" },
+      // A study sheet runs well under this; the ceiling only guards against a
+      // runaway response (unused headroom is not billed).
+      max_tokens: 4000,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: transcript }],
     });
+
+    const { input_tokens: inputTokens, output_tokens: outputTokens } =
+      message.usage;
+    console.log(
+      `[summary] note=${id} in=${inputTokens} out=${outputTokens} ` +
+        `cost≈$${(inputTokens * 2e-6 + outputTokens * 1e-5).toFixed(4)}`
+    );
 
     if (message.stop_reason === "refusal") {
       return NextResponse.json(
