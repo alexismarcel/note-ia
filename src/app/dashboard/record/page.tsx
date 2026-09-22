@@ -16,11 +16,25 @@ type Status =
   | "idle"
   | "initializing"
   | "listening"
+  | "recovering"
   | "stopped"
   | "saving"
   | "error";
 
 const PRE_BUFFER_FRAMES = 5;
+const MAX_RECOVERY_ATTEMPTS = 6;
+const RECOVERY_BASE_DELAY_MS = 1000;
+
+// Mirrors @ricky0123/vad-web's own defaults. Supplying getStream replaces
+// them wholesale, so anything missing here silently degrades capture.
+const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+  channelCount: 1,
+  echoCancellation: true,
+  autoGainControl: true,
+  noiseSuppression: true,
+};
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export default function RecordPage() {
   const router = useRouter();
@@ -32,10 +46,21 @@ export default function RecordPage() {
 
   const vadRef = useRef<MicVAD | null>(null);
   const sttRef = useRef<SttConnection | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const isSpeakingRef = useRef(false);
   const preBufferRef = useRef<Float32Array[]>([]);
+  const recoveringRef = useRef(false);
+  const stoppingRef = useRef(false);
+  const statusRef = useRef<Status>("idle");
+  // Track listeners outlive the render that created them, so they call through
+  // a ref rather than capturing a stale recover().
+  const interruptRef = useRef<(reason: string) => void>(() => {});
 
-  const cleanup = useCallback(async () => {
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  const teardown = useCallback(async () => {
     if (vadRef.current) {
       try {
         await vadRef.current.destroy();
@@ -51,89 +76,175 @@ export default function RecordPage() {
       sttRef.current.close();
       sttRef.current = null;
     }
+    if (streamRef.current) {
+      for (const track of streamRef.current.getTracks()) track.stop();
+      streamRef.current = null;
+    }
     isSpeakingRef.current = false;
     preBufferRef.current = [];
     setIsSpeaking(false);
   }, []);
 
-  useEffect(() => {
-    return () => {
-      cleanup();
-    };
-  }, [cleanup]);
-
   const sendFrame = useCallback((frame: Float32Array) => {
     sttRef.current?.sendFrame(floatTo16BitPCM(frame));
   }, []);
 
+  // Builds mic + socket. Deliberately touches no transcript state, so that
+  // recovering after an interruption keeps everything captured so far.
+  const openPipeline = useCallback(async () => {
+    const vad = await MicVAD.new({
+      baseAssetPath: "/vad/",
+      onnxWASMBasePath: "/vad/",
+      startOnLoad: false,
+      getStream: async () => {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: AUDIO_CONSTRAINTS,
+        });
+        streamRef.current = stream;
+        const [track] = stream.getAudioTracks();
+        // A phone call or another app taking the microphone shows up here,
+        // and is otherwise the recording's only warning that it has gone deaf.
+        track?.addEventListener("ended", () =>
+          interruptRef.current("micro libéré par le navigateur")
+        );
+        track?.addEventListener("mute", () =>
+          interruptRef.current("micro coupé par une autre application")
+        );
+        return stream;
+      },
+      onSpeechStart: () => {
+        isSpeakingRef.current = true;
+        setIsSpeaking(true);
+        for (const frame of preBufferRef.current) sendFrame(frame);
+        preBufferRef.current = [];
+      },
+      onSpeechEnd: () => {
+        isSpeakingRef.current = false;
+        setIsSpeaking(false);
+        sttRef.current?.finalize();
+      },
+      onVADMisfire: () => {
+        isSpeakingRef.current = false;
+        setIsSpeaking(false);
+      },
+      onFrameProcessed: (_probabilities, frame) => {
+        if (isSpeakingRef.current) {
+          sendFrame(frame);
+          return;
+        }
+        // Keep a short rolling buffer so the start of an utterance isn't
+        // clipped while onSpeechStart is still debouncing.
+        preBufferRef.current.push(frame);
+        if (preBufferRef.current.length > PRE_BUFFER_FRAMES) {
+          preBufferRef.current.shift();
+        }
+      },
+    });
+    vadRef.current = vad;
+
+    sttRef.current = await connectStt(resolveProvider(), {
+      onFinalDelta: (text) => {
+        setFinalTranscript((prev) => prev + text);
+        setInterimTranscript("");
+      },
+      onInterim: setInterimTranscript,
+      onDropped: (event) =>
+        interruptRef.current(`connexion perdue (code ${event.code})`),
+    });
+
+    await vad.start();
+  }, [sendFrame]);
+
+  const recover = useCallback(
+    async (reason: string) => {
+      if (recoveringRef.current || stoppingRef.current) return;
+      recoveringRef.current = true;
+      setStatus("recovering");
+      setErrorMessage(null);
+
+      for (let attempt = 1; attempt <= MAX_RECOVERY_ATTEMPTS; attempt++) {
+        await teardown();
+        // The microphone commonly stays busy for a while after a call ends,
+        // so back off instead of spending every attempt in the first second.
+        await sleep(RECOVERY_BASE_DELAY_MS * 2 ** (attempt - 1));
+        if (stoppingRef.current) {
+          recoveringRef.current = false;
+          return;
+        }
+        try {
+          await openPipeline();
+          setStatus("listening");
+          recoveringRef.current = false;
+          return;
+        } catch (err) {
+          console.warn(`[record] recovery attempt ${attempt} failed:`, err);
+        }
+      }
+
+      await teardown();
+      recoveringRef.current = false;
+      // "stopped", not "error": what was transcribed before the interruption
+      // is still here, and the save button belongs on screen.
+      setStatus("stopped");
+      setErrorMessage(
+        `Enregistrement interrompu (${reason}) et la reprise automatique a ` +
+          `échoué. La transcription obtenue avant la coupure est conservée : ` +
+          `tu peux l'enregistrer.`
+      );
+    },
+    [openPipeline, teardown]
+  );
+
+  useEffect(() => {
+    interruptRef.current = (reason: string) => {
+      void recover(reason);
+    };
+  }, [recover]);
+
+  useEffect(() => {
+    return () => {
+      stoppingRef.current = true;
+      teardown();
+    };
+  }, [teardown]);
+
+  // Mobile browsers routinely skip track events while backgrounded, so verify
+  // the microphone is still live whenever the tab comes back.
+  useEffect(() => {
+    const check = () => {
+      if (document.visibilityState !== "visible") return;
+      if (statusRef.current !== "listening") return;
+      const track = streamRef.current?.getAudioTracks()[0];
+      if (!track || track.readyState === "ended" || track.muted) {
+        interruptRef.current("micro indisponible au retour au premier plan");
+      }
+    };
+    document.addEventListener("visibilitychange", check);
+    return () => document.removeEventListener("visibilitychange", check);
+  }, []);
+
   const startRecording = useCallback(async () => {
+    stoppingRef.current = false;
     setErrorMessage(null);
     setFinalTranscript("");
     setInterimTranscript("");
     setStatus("initializing");
 
     try {
-      // 1. Request mic access / load the local VAD model first, closest to
-      // the user gesture so the browser's permission prompt isn't delayed.
-      const vad = await MicVAD.new({
-        baseAssetPath: "/vad/",
-        onnxWASMBasePath: "/vad/",
-        startOnLoad: false,
-        onSpeechStart: () => {
-          isSpeakingRef.current = true;
-          setIsSpeaking(true);
-          for (const frame of preBufferRef.current) sendFrame(frame);
-          preBufferRef.current = [];
-        },
-        onSpeechEnd: () => {
-          isSpeakingRef.current = false;
-          setIsSpeaking(false);
-          sttRef.current?.finalize();
-        },
-        onVADMisfire: () => {
-          isSpeakingRef.current = false;
-          setIsSpeaking(false);
-        },
-        onFrameProcessed: (_probabilities, frame) => {
-          if (isSpeakingRef.current) {
-            sendFrame(frame);
-            return;
-          }
-          // Keep a short rolling buffer so the start of an utterance isn't
-          // clipped while onSpeechStart is still debouncing.
-          preBufferRef.current.push(frame);
-          if (preBufferRef.current.length > PRE_BUFFER_FRAMES) {
-            preBufferRef.current.shift();
-          }
-        },
-      });
-      vadRef.current = vad;
-
-      // 2. Open the transcription stream. Which provider that is comes from
-      // NEXT_PUBLIC_STT_PROVIDER, so a bad rollout is reverted by flipping an
-      // environment variable rather than by shipping code.
-      sttRef.current = await connectStt(resolveProvider(), {
-        onFinalDelta: (text) => {
-          setFinalTranscript((prev) => prev + text);
-          setInterimTranscript("");
-        },
-        onInterim: setInterimTranscript,
-      });
-
-      // 3. Start the VAD only once the socket is ready to receive audio.
-      await vad.start();
+      await openPipeline();
       setStatus("listening");
     } catch (err) {
-      await cleanup();
+      await teardown();
       setErrorMessage(toErrorMessage(err));
       setStatus("error");
     }
-  }, [cleanup, sendFrame]);
+  }, [openPipeline, teardown]);
 
   const stopRecording = useCallback(async () => {
-    await cleanup();
+    stoppingRef.current = true;
+    await teardown();
     setStatus("stopped");
-  }, [cleanup]);
+  }, [teardown]);
 
   const saveNote = useCallback(async () => {
     setStatus("saving");
@@ -166,8 +277,11 @@ export default function RecordPage() {
   const discardNote = useCallback(() => {
     setFinalTranscript("");
     setInterimTranscript("");
+    setErrorMessage(null);
     setStatus("idle");
   }, []);
+
+  const isRecording = status === "listening" || status === "recovering";
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 p-8">
@@ -179,7 +293,7 @@ export default function RecordPage() {
       </div>
 
       <div className="flex items-center gap-4">
-        {status !== "listening" ? (
+        {!isRecording ? (
           <button
             onClick={startRecording}
             disabled={status === "initializing" || status === "saving"}
@@ -205,6 +319,12 @@ export default function RecordPage() {
           {status === "listening" && (
             <span className={isSpeaking ? "text-red-600" : "text-gray-500"}>
               {isSpeaking ? "● Parole détectée" : "En écoute (silence)"}
+            </span>
+          )}
+          {status === "recovering" && (
+            <span className="text-amber-600">
+              Interruption détectée — reprise en cours, la transcription est
+              conservée…
             </span>
           )}
           {status === "stopped" && (

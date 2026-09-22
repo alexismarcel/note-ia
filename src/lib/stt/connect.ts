@@ -11,6 +11,10 @@ export type SttCallbacks = {
   // supplies its own leading separator.
   onFinalDelta: (text: string) => void;
   onInterim: (text: string) => void;
+  // The socket dropped after having been open, and close() was not what did
+  // it. Without this the recording dies in silence and the UI keeps claiming
+  // to listen.
+  onDropped?: (event: CloseEvent) => void;
 };
 
 export type SttConnection = {
@@ -65,7 +69,8 @@ function openSocket(
   url: string,
   protocols: string[] | undefined,
   onOpen: (socket: WebSocket) => void,
-  onMessage: (data: unknown) => void
+  onMessage: (data: unknown) => void,
+  onClosedAfterOpen: (event: CloseEvent) => void
 ): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -91,7 +96,9 @@ function openSocket(
             })`
           )
         );
+        return;
       }
+      onClosedAfterOpen(event);
     };
     socket.onmessage = (event) => {
       try {
@@ -129,6 +136,9 @@ async function connectDeepgram(cb: SttCallbacks): Promise<SttConnection> {
   });
 
   let keepAlive: number | null = null;
+  // close() and a dropped connection both surface as onclose; only the latter
+  // should wake the caller's recovery path.
+  let intentionalClose = false;
 
   const socket = await openSocket(
     `wss://api.deepgram.com/v1/listen?${params}`,
@@ -151,6 +161,9 @@ async function connectDeepgram(cb: SttCallbacks): Promise<SttConnection> {
       } else {
         cb.onInterim(transcript);
       }
+    },
+    (event) => {
+      if (!intentionalClose) cb.onDropped?.(event);
     }
   );
 
@@ -164,6 +177,7 @@ async function connectDeepgram(cb: SttCallbacks): Promise<SttConnection> {
       }
     },
     close: () => {
+      intentionalClose = true;
       if (keepAlive !== null) window.clearInterval(keepAlive);
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: "CloseStream" }));
@@ -177,6 +191,7 @@ async function connectSoniox(cb: SttCallbacks): Promise<SttConnection> {
   const apiKey = await mintToken("/api/soniox/token", "api_key");
 
   let keepAlive: number | null = null;
+  let intentionalClose = false;
 
   const socket = await openSocket(
     "wss://stt-rt.soniox.com/transcribe-websocket",
@@ -223,6 +238,9 @@ async function connectSoniox(cb: SttCallbacks): Promise<SttConnection> {
       }
       if (finals) cb.onFinalDelta(finals);
       cb.onInterim(interim);
+    },
+    (event) => {
+      if (!intentionalClose) cb.onDropped?.(event);
     }
   );
 
@@ -236,6 +254,7 @@ async function connectSoniox(cb: SttCallbacks): Promise<SttConnection> {
       }
     },
     close: () => {
+      intentionalClose = true;
       if (keepAlive !== null) window.clearInterval(keepAlive);
       // An empty string is Soniox's end-of-stream signal.
       if (socket.readyState === WebSocket.OPEN) socket.send("");
