@@ -236,5 +236,15 @@ export function connectStt(
   provider: SttProvider,
   cb: SttCallbacks
 ): Promise<SttConnection> {
+  // The audio socket runs browser-to-provider, so the server logs never show
+  // which engine actually transcribed. State it where it happens, otherwise
+  // the only way to tell them apart is a provider's billing page.
+  console.info(
+    `[stt] provider=${provider} endpoint=${
+      provider === "soniox"
+        ? "stt-rt.soniox.com"
+        : "api.deepgram.com"
+    }`
+  );
   return provider === "soniox" ? connectSoniox(cb) : connectDeepgram(cb);
 }

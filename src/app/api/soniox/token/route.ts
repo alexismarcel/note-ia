@@ -62,5 +62,11 @@ export async function POST() {
     );
   }
 
+  // Proves server-side that Soniox was reached and accepted the permanent
+  // key — visible in `npm run dev` locally and in the Vercel function logs.
+  console.log(
+    `[stt] minted Soniox temporary key, expires_at=${data.expires_at ?? "?"}`
+  );
+
   return NextResponse.json({ api_key: data.api_key });
 }
