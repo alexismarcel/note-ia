@@ -24,9 +24,21 @@ const KEEPALIVE_INTERVAL_MS = 5000;
 export const SAMPLE_RATE = 16000;
 
 export function resolveProvider(): SttProvider {
-  return process.env.NEXT_PUBLIC_STT_PROVIDER === "soniox"
-    ? "soniox"
-    : "deepgram";
+  const raw = process.env.NEXT_PUBLIC_STT_PROVIDER;
+  // Dashboards happily store a stray space, newline or pair of quotes around a
+  // value. A strict comparison turns any of those into a silent fall back to
+  // Deepgram, which reads as "the variable was ignored" — so normalise, and
+  // say so out loud when the value is set but means nothing.
+  const value = raw?.trim().toLowerCase().replace(/^['"]|['"]$/g, "");
+
+  if (value === "soniox") return "soniox";
+  if (value && value !== "deepgram") {
+    console.error(
+      `[stt] NEXT_PUBLIC_STT_PROVIDER=${JSON.stringify(raw)} is not a known ` +
+        `provider — using deepgram. Expected "soniox" or "deepgram".`
+    );
+  }
+  return "deepgram";
 }
 
 async function mintToken(path: string, field: string): Promise<string> {
