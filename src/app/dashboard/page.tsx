@@ -20,8 +20,15 @@ export default async function DashboardPage() {
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
+  // An empty list and a silently-filtered query render identically, and a
+  // server component leaves no trace in the browser — so state both the
+  // identity the query ran as and what it returned, in the platform logs.
   if (error) {
-    console.error("Failed to load notes:", error);
+    console.error("[dashboard] notes query failed:", error);
+  } else {
+    console.log(
+      `[dashboard] user=${user.id} email=${user.email} notes=${notes?.length ?? 0}`
+    );
   }
 
   return (
