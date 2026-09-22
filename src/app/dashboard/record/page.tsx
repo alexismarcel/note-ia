@@ -6,6 +6,11 @@ import { MicVAD } from "@ricky0123/vad-web";
 import { createClient } from "@/lib/supabase/client";
 import { floatTo16BitPCM } from "@/lib/deepgram/pcm";
 import { toErrorMessage } from "@/lib/errors";
+import {
+  connectStt,
+  resolveProvider,
+  type SttConnection,
+} from "@/lib/stt/connect";
 
 type Status =
   | "idle"
@@ -15,7 +20,6 @@ type Status =
   | "saving"
   | "error";
 
-const KEEPALIVE_INTERVAL_MS = 5000;
 const PRE_BUFFER_FRAMES = 5;
 
 export default function RecordPage() {
@@ -27,16 +31,11 @@ export default function RecordPage() {
   const [interimTranscript, setInterimTranscript] = useState("");
 
   const vadRef = useRef<MicVAD | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
+  const sttRef = useRef<SttConnection | null>(null);
   const isSpeakingRef = useRef(false);
   const preBufferRef = useRef<Float32Array[]>([]);
-  const keepAliveIntervalRef = useRef<number | null>(null);
 
   const cleanup = useCallback(async () => {
-    if (keepAliveIntervalRef.current !== null) {
-      window.clearInterval(keepAliveIntervalRef.current);
-      keepAliveIntervalRef.current = null;
-    }
     if (vadRef.current) {
       try {
         await vadRef.current.destroy();
@@ -48,12 +47,9 @@ export default function RecordPage() {
       }
       vadRef.current = null;
     }
-    if (socketRef.current) {
-      if (socketRef.current.readyState === WebSocket.OPEN) {
-        socketRef.current.send(JSON.stringify({ type: "CloseStream" }));
-      }
-      socketRef.current.close();
-      socketRef.current = null;
+    if (sttRef.current) {
+      sttRef.current.close();
+      sttRef.current = null;
     }
     isSpeakingRef.current = false;
     preBufferRef.current = [];
@@ -67,10 +63,7 @@ export default function RecordPage() {
   }, [cleanup]);
 
   const sendFrame = useCallback((frame: Float32Array) => {
-    const socket = socketRef.current;
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(floatTo16BitPCM(frame));
-    }
+    sttRef.current?.sendFrame(floatTo16BitPCM(frame));
   }, []);
 
   const startRecording = useCallback(async () => {
@@ -95,10 +88,7 @@ export default function RecordPage() {
         onSpeechEnd: () => {
           isSpeakingRef.current = false;
           setIsSpeaking(false);
-          const socket = socketRef.current;
-          if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: "Finalize" }));
-          }
+          sttRef.current?.finalize();
         },
         onVADMisfire: () => {
           isSpeakingRef.current = false;
@@ -119,95 +109,15 @@ export default function RecordPage() {
       });
       vadRef.current = vad;
 
-      // 2. Mint a short-lived Deepgram token (the permanent key never
-      // leaves the server) and open the streaming WebSocket.
-      const tokenRes = await fetch("/api/deepgram/token", { method: "POST" });
-      if (!tokenRes.ok) {
-        const body = await tokenRes.json().catch(() => ({}));
-        throw new Error(body.error ?? `token request failed (${tokenRes.status})`);
-      }
-      const tokenBody = await tokenRes.json();
-      const accessToken: unknown = tokenBody.access_token;
-      if (typeof accessToken !== "string" || !accessToken) {
-        throw new Error(
-          `Deepgram token response missing access_token: ${JSON.stringify(tokenBody)}`
-        );
-      }
-
-      const params = new URLSearchParams({
-        model: "nova-2",
-        language: "fr",
-        smart_format: "true",
-        interim_results: "true",
-        encoding: "linear16",
-        sample_rate: "16000",
-        channels: "1",
-        endpointing: "300",
-      });
-
-      await new Promise<void>((resolve, reject) => {
-        let settled = false;
-        // "bearer" (not "token") is the scheme for the short-lived tokens
-        // /v1/auth/grant returns; "token" is only for permanent API keys,
-        // and mixing them up is rejected at the handshake as a 401 the
-        // browser can only ever report as close code 1006.
-        const socket = new WebSocket(
-          `wss://api.deepgram.com/v1/listen?${params}`,
-          ["bearer", accessToken]
-        );
-        socket.onopen = () => {
-          settled = true;
-          keepAliveIntervalRef.current = window.setInterval(() => {
-            if (socket.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify({ type: "KeepAlive" }));
-            }
-          }, KEEPALIVE_INTERVAL_MS);
-          resolve();
-        };
-        // For a failed handshake, browsers fire `error` *before* `close`,
-        // and `error` carries no status/body — only `close` exposes the
-        // code (e.g. 1006, 1008), which is the only diagnostic signal we
-        // get. So `error` must NOT settle the promise itself, or it wins
-        // the race and permanently hides the code `close` would report.
-        socket.onerror = () => {
-          console.warn("Deepgram WebSocket error event (see close code below)");
-        };
-        socket.onclose = (event) => {
-          if (keepAliveIntervalRef.current !== null) {
-            window.clearInterval(keepAliveIntervalRef.current);
-            keepAliveIntervalRef.current = null;
-          }
-          if (!settled) {
-            settled = true;
-            reject(
-              new Error(
-                `Deepgram WebSocket closed before opening (code ${event.code}${
-                  event.reason ? `: ${event.reason}` : ""
-                })`
-              )
-            );
-          }
-        };
-        socket.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.type !== "Results") return;
-            const transcript: string | undefined =
-              data.channel?.alternatives?.[0]?.transcript;
-            if (!transcript) return;
-            if (data.is_final) {
-              setFinalTranscript((prev) =>
-                prev ? `${prev} ${transcript}` : transcript
-              );
-              setInterimTranscript("");
-            } else {
-              setInterimTranscript(transcript);
-            }
-          } catch {
-            // ignore non-JSON / unrecognized messages
-          }
-        };
-        socketRef.current = socket;
+      // 2. Open the transcription stream. Which provider that is comes from
+      // NEXT_PUBLIC_STT_PROVIDER, so a bad rollout is reverted by flipping an
+      // environment variable rather than by shipping code.
+      sttRef.current = await connectStt(resolveProvider(), {
+        onFinalDelta: (text) => {
+          setFinalTranscript((prev) => prev + text);
+          setInterimTranscript("");
+        },
+        onInterim: setInterimTranscript,
       });
 
       // 3. Start the VAD only once the socket is ready to receive audio.
