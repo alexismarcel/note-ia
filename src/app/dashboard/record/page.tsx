@@ -300,23 +300,28 @@ export default function RecordPage() {
         </p>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         {!isRecording ? (
           <button
             onClick={startRecording}
             disabled={status === "initializing" || status === "saving"}
-            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-terracotta text-sm font-semibold text-cream shadow-[0_10px_24px_-8px_rgba(217,119,87,0.7)] transition-opacity hover:opacity-90 disabled:opacity-50"
-            aria-label="Démarrer l'enregistrement"
+            className="flex shrink-0 items-center gap-2.5 rounded-full border border-line-warm bg-white py-3 pl-4 pr-5 text-sm font-semibold text-ink transition-colors hover:border-terracotta hover:text-terracotta-deep disabled:opacity-50 disabled:hover:border-line-warm disabled:hover:text-ink"
           >
-            REC
+            <span className="h-2.5 w-2.5 rounded-full bg-terracotta" />
+            Démarrer l&apos;enregistrement
           </button>
         ) : (
           <button
             onClick={stopRecording}
-            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-ink text-sm font-semibold text-cream shadow-[0_10px_24px_-8px_rgba(43,33,26,0.6)] transition-opacity hover:opacity-90"
-            aria-label="Arrêter l'enregistrement"
+            className="flex shrink-0 items-center gap-2.5 rounded-full border border-terracotta bg-sand py-3 pl-4 pr-5 text-sm font-semibold text-terracotta-deep transition-colors hover:bg-cream"
           >
-            STOP
+            {/* The halo sits behind the dot and is decorative; the label and
+                the status text carry the meaning. */}
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              <span className="recording-halo absolute inset-0 rounded-full bg-terracotta" />
+              <span className="recording-dot relative h-2.5 w-2.5 rounded-full bg-terracotta" />
+            </span>
+            Arrêter l&apos;enregistrement
           </button>
         )}
 

@@ -33,6 +33,52 @@
    and the previous prefers-color-scheme block inverted body to near-black
    behind pages whose text colours all assume a light ground. */
 
+/* Recording indicator: one slow breath rather than a blink. 2.4s is above the
+   ~1s that reads as an alarm, and the dot never fully disappears, so it
+   confirms capture without demanding attention for two hours. */
+@keyframes recording-breath {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.82);
+  }
+}
+
+@keyframes recording-halo {
+  0% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.8);
+  }
+}
+
+.recording-dot {
+  animation: recording-breath 2.4s ease-in-out infinite;
+}
+
+.recording-halo {
+  animation: recording-halo 2.4s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recording-dot {
+    animation: none;
+  }
+  /* The halo carries no information the dot does not; drop it rather than
+     freeze it mid-expansion. */
+  .recording-halo {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
