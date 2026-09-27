@@ -47,7 +47,7 @@ export default async function NotePage({
           href="/dashboard"
           className="text-sm text-ink-soft transition-colors hover:text-terracotta-deep"
         >
-          ← Retour aux notes
+          ← Retour
         </Link>
         <h1 className="mt-3 font-display text-2xl font-medium text-ink">
           {noteDisplayTitle(note)}
