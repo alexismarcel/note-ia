@@ -8,8 +8,20 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-fraunces);
+
+  /* Warm cream / terracotta brand palette. */
+  --color-cream: #fbf4ec;
+  --color-cream-deep: #f6ece1;
+  --color-sand: #f3e4d3;
+  --color-sand-deep: #ead5bc;
+  --color-terracotta: #d97757;
+  --color-terracotta-deep: #c4622d;
+  --color-clay: #8a5a34;
+  --color-ink: #2b211a;
+  --color-ink-soft: #6b5d4f;
+  --color-line: #e0d2c0;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,5 +34,6 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Was hardcoded to Arial, which overrode the loaded webfonts entirely. */
+  font-family: var(--font-sans), system-ui, sans-serif;
 }
