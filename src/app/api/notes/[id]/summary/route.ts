@@ -36,6 +36,8 @@ Génère la fiche en Markdown avec cette structure :
 
 # [Titre du cours, déduit du contenu]
 
+Ce titre est repris tel quel pour nommer la note dans l'application. Donne un titre court (3 à 8 mots), qui identifie la matière et le sujet précis traité — par exemple « Droit constitutionnel — la séparation des pouvoirs ». N'y mets ni date, ni numéro de séance, ni guillemets, ni ponctuation finale. Si la matière n'est pas identifiable depuis le transcript, ne l'invente pas : nomme seulement le sujet abordé.
+
 ## Plan du cours
 [Liste des grandes parties abordées, dans l'ordre où elles ont été traitées]
 

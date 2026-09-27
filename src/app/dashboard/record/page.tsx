@@ -6,6 +6,7 @@ import { MicVAD } from "@ricky0123/vad-web";
 import { createClient } from "@/lib/supabase/client";
 import { floatTo16BitPCM } from "@/lib/deepgram/pcm";
 import { toErrorMessage } from "@/lib/errors";
+import { formatNoteDate } from "@/lib/notes/title";
 import {
   connectStt,
   resolveProvider,
@@ -258,7 +259,10 @@ export default function RecordPage() {
       const content = finalTranscript.trim();
       const { error } = await supabase.from("notes").insert({
         user_id: user.id,
-        title: content.slice(0, 60) || "Note vocale",
+        // A slice of the transcript made for a title that read as noise. The
+        // sheet renames the note properly; until then a date is all we honestly
+        // have.
+        title: `Note du ${formatNoteDate(new Date())}`,
         content,
         source_type: "audio",
       });

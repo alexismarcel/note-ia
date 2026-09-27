@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { formatNoteDate, noteDisplayTitle } from "@/lib/notes/title";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -16,7 +17,7 @@ export default async function DashboardPage() {
   // that intent readable and lets the query use notes_user_id_idx.
   const { data: notes, error } = await supabase
     .from("notes")
-    .select("id, title, content, created_at")
+    .select("id, title, content, ai_summary, created_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -61,17 +62,13 @@ export default async function DashboardPage() {
                 className="block rounded-2xl border border-line-soft bg-white p-5 transition-colors hover:border-line-warm"
               >
                 <h2 className="font-display text-lg font-medium text-ink">
-                  {note.title}
+                  {noteDisplayTitle(note)}
                 </h2>
                 <time
                   dateTime={note.created_at}
                   className="text-xs text-ink-faint"
                 >
-                  {new Date(note.created_at).toLocaleDateString("fr-FR", {
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  })}
+                  {formatNoteDate(note.created_at)}
                 </time>
                 {note.content && (
                   <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-ink-soft">

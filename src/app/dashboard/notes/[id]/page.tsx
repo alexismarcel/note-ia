@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { formatNoteDate, noteDisplayTitle } from "@/lib/notes/title";
 import NoteAiSheet from "./note-ai-sheet";
 
 export default async function NotePage({
@@ -49,14 +50,10 @@ export default async function NotePage({
           ← Retour aux notes
         </Link>
         <h1 className="mt-3 font-display text-2xl font-medium text-ink">
-          {note.title}
+          {noteDisplayTitle(note)}
         </h1>
         <time dateTime={note.created_at} className="text-sm text-ink-faint">
-          {new Date(note.created_at).toLocaleDateString("fr-FR", {
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-          })}
+          {formatNoteDate(note.created_at)}
         </time>
       </div>
 

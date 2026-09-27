@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toErrorMessage } from "@/lib/errors";
+import { titleFromSheet } from "@/lib/notes/title";
 
 type Props = {
   noteId: string;
@@ -50,9 +51,15 @@ export default function NoteAiSheet({ noteId, initialSheet }: Props) {
     setIsSaving(true);
     try {
       const supabase = createClient();
+      // The sheet's own H1 becomes the note's name, so the dashboard stops
+      // listing every note by its recording date.
+      const generatedTitle = titleFromSheet(sheet);
       const { error: saveError } = await supabase
         .from("notes")
-        .update({ ai_summary: sheet })
+        .update({
+          ai_summary: sheet,
+          ...(generatedTitle ? { title: generatedTitle } : {}),
+        })
         .eq("id", noteId);
       if (saveError) throw saveError;
 
