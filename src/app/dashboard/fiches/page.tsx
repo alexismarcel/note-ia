@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { formatNoteDate, noteDisplayTitle, titleFromSheet } from "@/lib/notes/title";
+import DeleteButton from "../delete-button";
 
 // The sheet opens with its own H1; repeating it under the heading would just
 // be the title twice.
@@ -61,10 +62,13 @@ export default async function SheetsPage() {
       ) : notes && notes.length > 0 ? (
         <ul className="mt-8 flex flex-col gap-3">
           {notes.map((note) => (
-            <li key={note.id}>
+            <li
+              key={note.id}
+              className="flex items-start gap-3 rounded-2xl border border-line-soft bg-white p-5 transition-colors hover:border-line-warm"
+            >
               <Link
                 href={`/dashboard/notes/${note.id}`}
-                className="block rounded-2xl border border-line-soft bg-white p-5 transition-colors hover:border-line-warm"
+                className="min-w-0 flex-1"
               >
                 <h2 className="font-display text-lg font-medium text-ink">
                   {titleFromSheet(note.ai_summary) ?? noteDisplayTitle(note)}
@@ -79,6 +83,11 @@ export default async function SheetsPage() {
                   {sheetPreview(note.ai_summary ?? "")}
                 </p>
               </Link>
+              <DeleteButton
+                noteId={note.id}
+                createdAt={note.created_at}
+                mode="sheet"
+              />
             </li>
           ))}
         </ul>
