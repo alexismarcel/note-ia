@@ -21,7 +21,12 @@
   --color-clay: #8a5a34;
   --color-ink: #2b211a;
   --color-ink-soft: #6b5d4f;
+  /* The design's #9C8E7D reaches only 3.19:1 on white and 2.93:1 on cream,
+     under the 4.5:1 that 12–13px text needs. Darkened to clear both. */
+  --color-ink-faint: #796c5c;
   --color-line: #e0d2c0;
+  --color-line-soft: #f0e3d4;
+  --color-line-warm: #e7dac8;
 }
 
 @media (prefers-color-scheme: dark) {
