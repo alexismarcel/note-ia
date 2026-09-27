@@ -32,33 +32,40 @@ export default async function DashboardPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Bienvenue, {user.email}</h1>
+    <main className="mx-auto w-full max-w-3xl px-5 py-10 sm:px-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-medium text-ink">
+            Vos fiches de cours
+          </h1>
+          <p className="mt-1 text-sm text-ink-soft">{user.email}</p>
+        </div>
         <Link
           href="/dashboard/record"
-          className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+          className="shrink-0 self-start rounded-full bg-terracotta px-5 py-2.5 text-sm font-semibold text-cream transition-opacity hover:opacity-90 sm:self-auto"
         >
           + Note vocale
         </Link>
       </div>
 
       {error ? (
-        <p className="mt-6 rounded-md bg-red-50 p-3 text-sm text-red-700">
+        <p className="mt-8 rounded-xl bg-red-50 p-4 text-sm text-red-700">
           Impossible de charger les notes : {error.message}
         </p>
       ) : notes && notes.length > 0 ? (
-        <ul className="mt-6 flex flex-col gap-3">
+        <ul className="mt-8 flex flex-col gap-3">
           {notes.map((note) => (
             <li key={note.id}>
               <Link
                 href={`/dashboard/notes/${note.id}`}
-                className="block rounded-md border border-gray-200 p-4 hover:border-gray-400"
+                className="block rounded-2xl border border-line-soft bg-white p-5 transition-colors hover:border-line-warm"
               >
-                <h2 className="font-medium">{note.title}</h2>
+                <h2 className="font-display text-lg font-medium text-ink">
+                  {note.title}
+                </h2>
                 <time
                   dateTime={note.created_at}
-                  className="text-xs text-gray-500"
+                  className="text-xs text-ink-faint"
                 >
                   {new Date(note.created_at).toLocaleDateString("fr-FR", {
                     day: "numeric",
@@ -67,7 +74,7 @@ export default async function DashboardPage() {
                   })}
                 </time>
                 {note.content && (
-                  <p className="mt-2 line-clamp-3 text-sm text-gray-600">
+                  <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-ink-soft">
                     {note.content}
                   </p>
                 )}
@@ -76,9 +83,15 @@ export default async function DashboardPage() {
           ))}
         </ul>
       ) : (
-        <p className="mt-2 text-sm text-gray-500">
-          Tes notes générées par IA apparaîtront ici.
-        </p>
+        <div className="mt-8 rounded-2xl border border-dashed border-line px-6 py-12 text-center">
+          <p className="font-display text-lg font-medium text-ink">
+            Aucune fiche pour le moment
+          </p>
+          <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-ink-soft">
+            Enregistrez votre premier cours : la transcription et la fiche se
+            font toutes seules.
+          </p>
+        </div>
       )}
     </main>
   );

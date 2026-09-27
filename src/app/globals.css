@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fbf4ec;
+  --foreground: #2b211a;
 }
 
 @theme inline {
@@ -29,12 +29,9 @@
   --color-line-warm: #e7dac8;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* No dark counterpart on purpose: the brand is a single warm light palette,
+   and the previous prefers-color-scheme block inverted body to near-black
+   behind pages whose text colours all assume a light ground. */
 
 body {
   background: var(--background);

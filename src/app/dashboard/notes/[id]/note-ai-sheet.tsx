@@ -73,7 +73,7 @@ export default function NoteAiSheet({ noteId, initialSheet }: Props) {
         <button
           onClick={generate}
           disabled={isGenerating}
-          className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+          className="rounded-full bg-terracotta px-5 py-2.5 text-sm font-semibold text-cream transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {isGenerating ? "Génération en cours…" : "Générer la fiche IA"}
         </button>
@@ -82,23 +82,23 @@ export default function NoteAiSheet({ noteId, initialSheet }: Props) {
           <button
             onClick={save}
             disabled={isSaving}
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-full border-[1.5px] border-line-warm px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-white disabled:opacity-50"
           >
             {isSaving ? "Enregistrement…" : "Sauvegarder la fiche"}
           </button>
         )}
 
         {sheet !== null && !hasUnsavedChanges && (
-          <span className="text-sm text-gray-500">Fiche enregistrée.</span>
+          <span className="text-sm text-ink-faint">Fiche enregistrée.</span>
         )}
       </div>
 
       {error && (
-        <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>
+        <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>
       )}
 
       {sheet && (
-        <article className="whitespace-pre-wrap rounded-md border border-gray-200 p-4 text-sm leading-relaxed">
+        <article className="whitespace-pre-wrap rounded-2xl border border-line-soft bg-white p-5 text-sm leading-relaxed text-ink">
           {sheet}
         </article>
       )}

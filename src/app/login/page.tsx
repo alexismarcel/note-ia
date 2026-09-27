@@ -23,8 +23,6 @@ function MicIcon() {
 
 export default function LoginPage() {
   return (
-    // Background set here rather than inherited: body still inverts under
-    // prefers-color-scheme: dark, which this light-only palette cannot take.
     <div className="flex min-h-screen flex-col items-center justify-between gap-10 bg-cream px-5 py-10 text-ink">
       <Link href="/" className="flex items-center gap-2.5">
         <span className="flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-terracotta text-cream">

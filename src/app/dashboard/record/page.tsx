@@ -284,10 +284,12 @@ export default function RecordPage() {
   const isRecording = status === "listening" || status === "recovering";
 
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-6 p-8">
+    <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-5 py-10 sm:px-8">
       <div>
-        <h1 className="text-2xl font-semibold">Nouvelle note vocale</h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="font-display text-2xl font-medium text-ink">
+          Nouvelle note vocale
+        </h1>
+        <p className="mt-1 text-sm text-ink-soft">
           Enregistre ton cours, la transcription apparaît en temps réel.
         </p>
       </div>
@@ -297,7 +299,7 @@ export default function RecordPage() {
           <button
             onClick={startRecording}
             disabled={status === "initializing" || status === "saving"}
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-red-600 text-white shadow hover:bg-red-700 disabled:opacity-50"
+            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-terracotta text-sm font-semibold text-cream shadow-[0_10px_24px_-8px_rgba(217,119,87,0.7)] transition-opacity hover:opacity-90 disabled:opacity-50"
             aria-label="Démarrer l'enregistrement"
           >
             REC
@@ -305,7 +307,7 @@ export default function RecordPage() {
         ) : (
           <button
             onClick={stopRecording}
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-900 text-white shadow hover:bg-gray-800"
+            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-ink text-sm font-semibold text-cream shadow-[0_10px_24px_-8px_rgba(43,33,26,0.6)] transition-opacity hover:opacity-90"
             aria-label="Arrêter l'enregistrement"
           >
             STOP
@@ -314,42 +316,42 @@ export default function RecordPage() {
 
         <div className="text-sm">
           {status === "initializing" && (
-            <span className="text-gray-500">Initialisation du micro…</span>
+            <span className="text-ink-soft">Initialisation du micro…</span>
           )}
           {status === "listening" && (
-            <span className={isSpeaking ? "text-red-600" : "text-gray-500"}>
+            <span className={isSpeaking ? "text-terracotta-deep" : "text-ink-soft"}>
               {isSpeaking ? "● Parole détectée" : "En écoute (silence)"}
             </span>
           )}
           {status === "recovering" && (
-            <span className="text-amber-600">
+            <span className="text-clay">
               Interruption détectée — reprise en cours, la transcription est
               conservée…
             </span>
           )}
           {status === "stopped" && (
-            <span className="text-gray-500">Enregistrement terminé.</span>
+            <span className="text-ink-soft">Enregistrement terminé.</span>
           )}
           {status === "saving" && (
-            <span className="text-gray-500">Enregistrement de la note…</span>
+            <span className="text-ink-soft">Enregistrement de la note…</span>
           )}
         </div>
       </div>
 
       {errorMessage && (
-        <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+        <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
           {errorMessage}
         </p>
       )}
 
-      <div className="min-h-[200px] rounded-md border border-gray-200 p-4 text-sm leading-relaxed">
+      <div className="min-h-[200px] rounded-2xl border border-line-soft bg-white p-5 text-sm leading-relaxed text-ink">
         {finalTranscript || interimTranscript ? (
           <p>
             {finalTranscript}{" "}
-            <span className="text-gray-400">{interimTranscript}</span>
+            <span className="text-ink-faint">{interimTranscript}</span>
           </p>
         ) : (
-          <p className="text-gray-400">La transcription s&apos;affichera ici…</p>
+          <p className="text-ink-faint">La transcription s&apos;affichera ici…</p>
         )}
       </div>
 
@@ -358,13 +360,13 @@ export default function RecordPage() {
           <button
             onClick={saveNote}
             disabled={!finalTranscript.trim()}
-            className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+            className="rounded-full bg-terracotta px-5 py-2.5 text-sm font-semibold text-cream transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             Enregistrer la note
           </button>
           <button
             onClick={discardNote}
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
+            className="rounded-full border-[1.5px] border-line-warm px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-white"
           >
             Ignorer
           </button>

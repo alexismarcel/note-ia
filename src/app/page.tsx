@@ -107,8 +107,6 @@ function PlayIcon({ className }: { className?: string }) {
 
 export default function Home() {
   return (
-    // The palette is light-only, so the background is set here rather than
-    // inherited from body, which still flips under prefers-color-scheme: dark.
     <div className="flex min-h-screen flex-col bg-cream text-ink">
       <header className="flex items-center justify-between gap-3 px-5 py-6 sm:gap-6 sm:px-8 lg:px-20 lg:py-7">
         <Link href="/" className="flex shrink-0 items-center gap-2.5">

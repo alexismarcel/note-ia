@@ -31,8 +31,8 @@ export default async function NotePage({
     }
     console.error("Failed to load note:", error);
     return (
-      <main className="mx-auto max-w-3xl p-8">
-        <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+      <main className="mx-auto w-full max-w-3xl px-5 py-10 sm:px-8">
+        <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
           Impossible de charger la note : {error.message}
         </p>
       </main>
@@ -40,16 +40,18 @@ export default async function NotePage({
   }
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
+    <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-5 py-10 sm:px-8">
       <div>
         <Link
           href="/dashboard"
-          className="text-sm text-gray-500 hover:text-gray-900"
+          className="text-sm text-ink-soft transition-colors hover:text-terracotta-deep"
         >
           ← Retour aux notes
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold">{note.title}</h1>
-        <time dateTime={note.created_at} className="text-sm text-gray-500">
+        <h1 className="mt-3 font-display text-2xl font-medium text-ink">
+          {note.title}
+        </h1>
+        <time dateTime={note.created_at} className="text-sm text-ink-faint">
           {new Date(note.created_at).toLocaleDateString("fr-FR", {
             day: "numeric",
             month: "long",
@@ -61,10 +63,10 @@ export default async function NotePage({
       <NoteAiSheet noteId={note.id} initialSheet={note.ai_summary} />
 
       <div>
-        <h2 className="mb-2 text-sm font-medium text-gray-500">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
           Transcription brute
         </h2>
-        <p className="whitespace-pre-wrap rounded-md border border-gray-200 p-4 text-sm leading-relaxed">
+        <p className="whitespace-pre-wrap rounded-2xl border border-line-soft bg-white p-5 text-sm leading-relaxed text-ink-soft">
           {note.content || "Aucune transcription."}
         </p>
       </div>
