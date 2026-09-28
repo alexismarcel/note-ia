@@ -31,7 +31,7 @@ export default async function SheetsPage() {
   // and a lecture transcript is by far the heaviest column on the row.
   const { data: notes, error } = await supabase
     .from("notes")
-    .select("id, title, ai_summary, created_at")
+    .select("id, title, ai_summary, created_at, course_id")
     .eq("user_id", user.id)
     .not("ai_summary", "is", null)
     .order("created_at", { ascending: false });
@@ -39,6 +39,22 @@ export default async function SheetsPage() {
   if (error) {
     console.error("[fiches] query failed:", error);
   }
+
+  // One extra query for the whole list rather than an embedded resource per
+  // row: the label is the only thing needed, and a nested select that stops
+  // resolving would take the list down with it.
+  const { data: courses, error: coursesError } = await supabase
+    .from("courses")
+    .select("id, title")
+    .eq("user_id", user.id);
+
+  if (coursesError) {
+    console.error("[fiches] courses query failed:", coursesError);
+  }
+
+  const courseTitles = new Map(
+    (courses ?? []).map((course) => [course.id, course.title])
+  );
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 py-10 sm:px-8">
@@ -79,6 +95,10 @@ export default async function SheetsPage() {
                 >
                   {formatNoteDate(note.created_at)}
                 </time>
+                <span className="block text-xs text-ink-faint">
+                  {(note.course_id && courseTitles.get(note.course_id)) ||
+                    "Non classé"}
+                </span>
                 <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-ink-soft">
                   {sheetPreview(note.ai_summary ?? "")}
                 </p>

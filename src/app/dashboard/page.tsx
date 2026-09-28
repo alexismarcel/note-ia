@@ -41,6 +41,26 @@ function WaveIcon() {
   );
 }
 
+function StackIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 19V5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+      <polyline points="15 3 15 8 20 8" />
+      <line x1="8" y1="12" x2="14" y2="12" />
+      <line x1="8" y1="16" x2="16" y2="16" />
+    </svg>
+  );
+}
+
 function SheetIcon() {
   return (
     <svg
@@ -73,17 +93,22 @@ export default async function DashboardPage() {
 
   // head: true asks for the count alone — no note bodies cross the wire just
   // to put a number on a card.
-  const [{ count: rawCount }, { count: sheetCount }] = await Promise.all([
-    supabase
-      .from("notes")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id),
-    supabase
-      .from("notes")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .not("ai_summary", "is", null),
-  ]);
+  const [{ count: rawCount }, { count: sheetCount }, { count: courseCount }] =
+    await Promise.all([
+      supabase
+        .from("notes")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id),
+      supabase
+        .from("notes")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .not("ai_summary", "is", null),
+      supabase
+        .from("courses")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id),
+    ]);
 
   const entries = [
     {
@@ -93,6 +118,14 @@ export default async function DashboardPage() {
       body: "Lancez la transcription en direct.",
       meta: null,
       primary: true,
+    },
+    {
+      href: "/dashboard/cours",
+      icon: <StackIcon />,
+      title: "Mes cours",
+      body: "Rangés par matière, séance après séance.",
+      meta: courseCount,
+      primary: false,
     },
     {
       href: "/dashboard/enregistrements",

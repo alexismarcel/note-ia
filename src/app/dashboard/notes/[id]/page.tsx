@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { formatNoteDate, noteDisplayTitle } from "@/lib/notes/title";
+import CoursePicker from "../../course-picker";
 import NoteAiSheet from "./note-ai-sheet";
 
 export default async function NotePage({
@@ -20,7 +21,7 @@ export default async function NotePage({
 
   const { data: note, error } = await supabase
     .from("notes")
-    .select("id, title, content, ai_summary, created_at")
+    .select("id, title, content, ai_summary, created_at, course_id")
     .eq("id", id)
     .single();
 
@@ -40,6 +41,30 @@ export default async function NotePage({
     );
   }
 
+  // Fetched separately rather than as an embedded resource: two plain queries
+  // fail one at a time and say which, where a nested select that stops
+  // resolving reports one opaque error for the whole row.
+  let course: { id: string; title: string; subject: string | null } | null = null;
+  if (note.course_id) {
+    const { data, error: courseError } = await supabase
+      .from("courses")
+      .select("id, title, subjects (name)")
+      .eq("id", note.course_id)
+      .single();
+    if (courseError) {
+      console.error("[note] course lookup failed:", courseError);
+    } else if (data) {
+      const subject = data.subjects as { name: string } | { name: string }[] | null;
+      course = {
+        id: data.id,
+        title: data.title,
+        subject: Array.isArray(subject)
+          ? subject[0]?.name ?? null
+          : subject?.name ?? null,
+      };
+    }
+  }
+
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-5 py-10 sm:px-8">
       <div>
@@ -55,7 +80,24 @@ export default async function NotePage({
         <time dateTime={note.created_at} className="text-sm text-ink-faint">
           {formatNoteDate(note.created_at)}
         </time>
+        {course && (
+          <p className="mt-2 text-sm">
+            <Link
+              href={`/dashboard/cours/${course.id}`}
+              className="text-terracotta-deep hover:underline"
+            >
+              {course.subject ? `${course.subject} › ` : ""}
+              {course.title}
+            </Link>
+          </p>
+        )}
       </div>
+
+      <CoursePicker
+        mode="assign"
+        noteId={note.id}
+        initialCourseId={note.course_id ?? null}
+      />
 
       <NoteAiSheet noteId={note.id} initialSheet={note.ai_summary} />
 
