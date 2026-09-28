@@ -1,8 +1,11 @@
 import Link from "next/link";
 
+// Every href here must match a section id further down — a menu entry that
+// scrolls nowhere is worse than one that is missing. "Tarifs" was one of those:
+// there is no pricing section, and inventing one would announce prices that do
+// not exist.
 const NAV_LINKS = [
-  { label: "Fonctionnalités", href: "#fonctionnalites" },
-  { label: "Tarifs", href: "#tarifs" },
+  { label: "Démo", href: "#demo" },
   { label: "Comment ça marche", href: "#comment-ca-marche" },
 ];
 

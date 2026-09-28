@@ -16,15 +16,18 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "notes-ia",
-  description: "Prise de notes IA pour étudiants",
+  // Was the repository name, which is what the browser tab and every shared
+  // link showed. The product is called Note IA everywhere else.
+  title: "Note IA",
+  description:
+    "Enregistre ton cours, la transcription arrive en direct et la fiche de révision s'écrit toute seule.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="fr"
-      className={`${inter.variable} ${fraunces.variable} h-full antialiased`}
+      className={`${inter.variable} ${fraunces.variable} h-full antialiased motion-safe:scroll-smooth`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
