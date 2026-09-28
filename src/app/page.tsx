@@ -102,14 +102,6 @@ function ArrowIcon() {
   );
 }
 
-function PlayIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <polygon points="5 3 19 12 5 21 5 3" />
-    </svg>
-  );
-}
-
 export default function Home() {
   return (
     <div className="flex min-h-screen flex-col bg-cream text-ink">
@@ -184,15 +176,6 @@ export default function Home() {
               Essayer gratuitement
               <ArrowIcon />
             </Link>
-            <a
-              href="#demo"
-              className="flex items-center justify-center gap-2.5 rounded-full border-[1.5px] border-line px-6 py-4 text-base font-semibold text-ink transition-colors hover:bg-sand"
-            >
-              <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-ink text-cream">
-                <PlayIcon className="h-[9px] w-[9px]" />
-              </span>
-              Voir la démo
-            </a>
           </div>
         </section>
 
