@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import DemoNoteIA from "@/components/DemoNoteIA";
+
 // Every href here must match a section id further down — a menu entry that
 // scrolls nowhere is worse than one that is missing. "Tarifs" was one of those:
 // there is no pricing section, and inventing one would announce prices that do
@@ -196,26 +198,7 @@ export default function Home() {
 
         <section id="demo" className="px-5 pb-20 sm:px-8 lg:px-20 lg:pb-24">
           <div className="mx-auto w-full max-w-[1100px]">
-            <div className="relative flex aspect-[16/9] items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-br from-sand to-sand-deep shadow-[0_30px_70px_-20px_rgba(139,90,52,0.35)]">
-              <div className="flex flex-col items-center gap-5 px-6 text-center">
-                {/* Placeholder until the demo video is available. */}
-                <button
-                  type="button"
-                  className="flex h-16 w-16 items-center justify-center rounded-full bg-ink text-cream shadow-[0_12px_30px_rgba(43,33,26,0.3)] transition-transform hover:scale-105 sm:h-[84px] sm:w-[84px]"
-                  aria-label="Lire la vidéo de démonstration"
-                >
-                  <PlayIcon className="h-5 w-5 sm:h-[26px] sm:w-[26px]" />
-                </button>
-                <div>
-                  <p className="font-display text-lg font-medium sm:text-xl">
-                    Voir Note IA en action
-                  </p>
-                  <p className="mt-1 text-[13px] text-clay sm:text-sm">
-                    1 min 40 — enregistrement, transcription, fiche générée
-                  </p>
-                </div>
-              </div>
-            </div>
+            <DemoNoteIA />
           </div>
         </section>
 
