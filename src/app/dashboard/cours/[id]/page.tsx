@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { countLabel } from "@/lib/courses";
 import { formatNoteDate, noteDisplayTitle } from "@/lib/notes/title";
 import GroupDeleteButton from "../group-delete-button";
+import MoveButton from "../move-button";
 import RenameButton from "../rename-button";
 
 export default async function CoursePage({
@@ -82,6 +83,7 @@ export default async function CoursePage({
         </p>
         <div className="mt-2 flex flex-wrap items-start gap-1">
           <RenameButton mode="course" id={course.id} currentName={course.title} />
+          <MoveButton courseId={course.id} currentSubjectId={course.subject_id} />
           <GroupDeleteButton
             mode="course"
             id={course.id}
