@@ -74,7 +74,7 @@ export default function GroupDeleteButton({ mode, id, redirectTo }: Props) {
   }
 
   return (
-    <span className="flex max-w-[15rem] shrink-0 flex-col items-end gap-1.5 text-right">
+    <span className="flex max-w-full flex-col items-start gap-1.5">
       <span className="text-xs text-ink-soft">{COPY[mode].confirm}</span>
       <span className="flex gap-1.5">
         <button

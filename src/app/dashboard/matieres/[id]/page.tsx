@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { byCourseTitle, countLabel } from "@/lib/courses";
 import { formatNoteDate, noteDisplayTitle } from "@/lib/notes/title";
 import GroupDeleteButton from "../../cours/group-delete-button";
+import RenameButton from "../../cours/rename-button";
 import QuickAdd from "../../cours/quick-add";
 
 export default async function SubjectPage({
@@ -84,21 +85,29 @@ export default async function SubjectPage({
       >
         ← Mes cours
       </Link>
-      <div className="mt-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="font-display text-2xl font-medium text-ink">
-            {subject.name}
-          </h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            {countLabel(courses.length, "cours", "cours")} ·{" "}
-            {countLabel(notes.length, "note")}
-          </p>
+      <div className="mt-3">
+        <h1 className="font-display text-2xl font-medium text-ink">
+          {subject.name}
+        </h1>
+        <p className="mt-1 text-sm text-ink-soft">
+          {countLabel(courses.length, "cours", "cours")} ·{" "}
+          {countLabel(notes.length, "note")}
+        </p>
+        {/* Below the title rather than beside it: renaming opens a field that
+            needs the full width, which a column pinned to the right cannot
+            give it. */}
+        <div className="mt-2 flex flex-wrap items-start gap-1">
+          <RenameButton
+            mode="subject"
+            id={subject.id}
+            currentName={subject.name}
+          />
+          <GroupDeleteButton
+            mode="subject"
+            id={subject.id}
+            redirectTo="/dashboard/cours"
+          />
         </div>
-        <GroupDeleteButton
-          mode="subject"
-          id={subject.id}
-          redirectTo="/dashboard/cours"
-        />
       </div>
 
       <Link

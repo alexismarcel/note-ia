@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { countLabel } from "@/lib/courses";
 import { formatNoteDate, noteDisplayTitle } from "@/lib/notes/title";
 import GroupDeleteButton from "../group-delete-button";
+import RenameButton from "../rename-button";
 
 export default async function CoursePage({
   params,
@@ -71,21 +72,22 @@ export default async function CoursePage({
         ← {subjectName ?? "Mes cours"}
       </Link>
 
-      <div className="mt-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="font-display text-2xl font-medium text-ink">
-            {course.title}
-          </h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            {countLabel(sessions.length, "séance")} ·{" "}
-            {countLabel(withSheets.length, "fiche")}
-          </p>
+      <div className="mt-3">
+        <h1 className="font-display text-2xl font-medium text-ink">
+          {course.title}
+        </h1>
+        <p className="mt-1 text-sm text-ink-soft">
+          {countLabel(sessions.length, "séance")} ·{" "}
+          {countLabel(withSheets.length, "fiche")}
+        </p>
+        <div className="mt-2 flex flex-wrap items-start gap-1">
+          <RenameButton mode="course" id={course.id} currentName={course.title} />
+          <GroupDeleteButton
+            mode="course"
+            id={course.id}
+            redirectTo={`/dashboard/matieres/${course.subject_id}`}
+          />
         </div>
-        <GroupDeleteButton
-          mode="course"
-          id={course.id}
-          redirectTo={`/dashboard/matieres/${course.subject_id}`}
-        />
       </div>
 
       <Link
