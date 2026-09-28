@@ -64,9 +64,12 @@ export default async function NotePage({
   // leaves it open, which is the rule the product asked for.
   const { data: usageRows } = await supabase
     .from("usage_summary")
-    .select("is_subscribed, free_sheets_used, free_sheet_allowance")
+    .select(
+      "is_subscribed, is_unlimited, free_sheets_used, free_sheet_allowance"
+    )
     .single();
   const canGenerate =
+    usageRows?.is_unlimited === true ||
     usageRows?.is_subscribed === true ||
     (usageRows?.free_sheets_used ?? 0) < (usageRows?.free_sheet_allowance ?? 0);
 

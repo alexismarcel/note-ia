@@ -50,12 +50,15 @@ export default async function SubscriptionPage({
   const { data: usage } = await supabase
     .from("usage_summary")
     .select(
-      "free_sheets_used, free_sheet_allowance, recorded_seconds, free_recording_seconds"
+      "is_unlimited, free_sheets_used, free_sheet_allowance, recorded_seconds, free_recording_seconds"
     )
     .single();
 
   const status = profile?.subscription_status ?? null;
-  const active = isEntitled(status);
+  // An unlimited account has no subscription and needs none: it must not be
+  // shown a "S'abonner" button as though it were a lapsed customer.
+  const unlimited = usage?.is_unlimited === true;
+  const active = unlimited || isEntitled(status);
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 py-10 sm:px-8">
@@ -77,8 +80,17 @@ export default async function SubscriptionPage({
 
       <div className="mt-8 rounded-2xl border border-line-soft bg-white p-6">
         <p className="font-display text-lg font-medium text-ink">
-          {status ? (STATUS_COPY[status] ?? status) : "Aucun abonnement"}
+          {unlimited
+            ? "Accès illimité"
+            : status
+              ? (STATUS_COPY[status] ?? status)
+              : "Aucun abonnement"}
         </p>
+        {unlimited && (
+          <p className="mt-1 text-sm text-ink-soft">
+            Ce compte n&apos;est soumis à aucun plafond. Rien à payer.
+          </p>
+        )}
 
         {profile?.subscription_current_period_end && (
           <p className="mt-1 text-sm text-ink-soft">

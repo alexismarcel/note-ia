@@ -98,7 +98,7 @@ export default async function DashboardPage() {
     supabase
       .from("usage_summary")
       .select(
-        "is_subscribed, free_sheets_used, free_sheet_allowance, recorded_seconds, free_recording_seconds"
+        "is_subscribed, is_unlimited, free_sheets_used, free_sheet_allowance, recorded_seconds, free_recording_seconds"
       )
       .single(),
   ]);
@@ -160,7 +160,12 @@ export default async function DashboardPage() {
 
       {/* The allowance is shown before it runs out, not only when it stops
           something: finding the ceiling by hitting it is the unpleasant way. */}
-      {usage && !usage.is_subscribed && (
+      {usage?.is_unlimited && (
+        <p className="mt-3 text-sm text-ink-faint">
+          Accès illimité — enregistrement et fiches sans plafond.
+        </p>
+      )}
+      {usage && !usage.is_unlimited && !usage.is_subscribed && (
         <p className="mt-3 text-sm text-ink-faint">
           Offre gratuite : {usage.free_sheets_used}/{usage.free_sheet_allowance}{" "}
           fiches ·{" "}
@@ -174,7 +179,7 @@ export default async function DashboardPage() {
           </Link>
         </p>
       )}
-      {usage?.is_subscribed && (
+      {usage?.is_subscribed && !usage.is_unlimited && (
         <p className="mt-3 text-sm text-ink-faint">
           Abonnement actif — enregistrement et fiches illimités.{" "}
           <Link

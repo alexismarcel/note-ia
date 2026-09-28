@@ -55,7 +55,13 @@ returns integer language sql immutable as $$ select 3 * 3600 $$;
 -- 4. Where the user stands ------------------------------------------------
 -- security_invoker so the sum covers the caller's own notes and nobody
 -- else's, exactly as a direct query would.
-create or replace view public.usage_summary
+-- Dropped rather than replaced: a later migration adds a column to this view,
+-- and "create or replace view" refuses to drop one, which would make replaying
+-- the whole set from scratch fail here. The later migration recreates it with
+-- its extra column, so a replay ends in the right place either way.
+drop view if exists public.usage_summary;
+
+create view public.usage_summary
 with (security_invoker = on) as
 select
   p.id as user_id,

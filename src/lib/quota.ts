@@ -9,6 +9,8 @@ export const FREE_RECORDING_SECONDS = 3 * 3600;
 export type AllowanceReason =
   | "free"
   | "subscribed"
+  // An account on free_access_emails: no ceiling, and no free credit spent.
+  | "unlimited"
   | "sheet_limit"
   | "time_limit"
   | "no_profile"
