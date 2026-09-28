@@ -58,6 +58,11 @@ export default function RecordClient({ prefill }: { prefill: Filing }) {
   const recoveringRef = useRef(false);
   const stoppingRef = useRef(false);
   const statusRef = useRef<Status>("idle");
+  // Wall-clock time actually spent capturing, accumulated across a pause or an
+  // interruption: it is what the free allowance is counted in, so it must not
+  // include the minutes the mic was down.
+  const elapsedRef = useRef(0);
+  const segmentStartedAtRef = useRef<number | null>(null);
   // Track listeners outlive the render that created them, so they call through
   // a ref rather than capturing a stale recover().
   const interruptRef = useRef<(reason: string) => void>(() => {});
@@ -65,6 +70,19 @@ export default function RecordClient({ prefill }: { prefill: Filing }) {
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
+
+  // The clock runs only while the microphone is actually live, so a phone call
+  // in the middle of a lecture does not bill the user for the silence.
+  const closeSegment = useCallback(() => {
+    if (segmentStartedAtRef.current === null) return;
+    elapsedRef.current += Date.now() - segmentStartedAtRef.current;
+    segmentStartedAtRef.current = null;
+  }, []);
+
+  const markListening = useCallback(() => {
+    segmentStartedAtRef.current = Date.now();
+    setStatus("listening");
+  }, []);
 
   const teardown = useCallback(async () => {
     if (vadRef.current) {
@@ -166,6 +184,8 @@ export default function RecordClient({ prefill }: { prefill: Filing }) {
     async (reason: string) => {
       if (recoveringRef.current || stoppingRef.current) return;
       recoveringRef.current = true;
+      // The mic is already down: stop counting before the retries begin.
+      closeSegment();
       setStatus("recovering");
       setErrorMessage(null);
 
@@ -180,7 +200,7 @@ export default function RecordClient({ prefill }: { prefill: Filing }) {
         }
         try {
           await openPipeline();
-          setStatus("listening");
+          markListening();
           recoveringRef.current = false;
           return;
         } catch (err) {
@@ -199,7 +219,7 @@ export default function RecordClient({ prefill }: { prefill: Filing }) {
           `tu peux l'enregistrer.`
       );
     },
-    [openPipeline, teardown]
+    [closeSegment, markListening, openPipeline, teardown]
   );
 
   useEffect(() => {
@@ -239,19 +259,20 @@ export default function RecordClient({ prefill }: { prefill: Filing }) {
 
     try {
       await openPipeline();
-      setStatus("listening");
+      markListening();
     } catch (err) {
       await teardown();
       setErrorMessage(toErrorMessage(err));
       setStatus("error");
     }
-  }, [openPipeline, teardown]);
+  }, [markListening, openPipeline, teardown]);
 
   const stopRecording = useCallback(async () => {
     stoppingRef.current = true;
+    closeSegment();
     await teardown();
     setStatus("stopped");
-  }, [teardown]);
+  }, [closeSegment, teardown]);
 
   const saveNote = useCallback(async () => {
     setStatus("saving");
@@ -271,6 +292,10 @@ export default function RecordClient({ prefill }: { prefill: Filing }) {
         title: `Note du ${formatNoteDate(new Date())}`,
         content,
         source_type: "audio",
+        // Rounded up: a 40-second recording that stored 0 would be free
+        // capture. The browser measures it, which is the only place that
+        // knows — see the note in the migration.
+        duration_seconds: Math.ceil(elapsedRef.current / 1000),
         // null is a legitimate answer on both: a note can be filed later from
         // its own page. A matière without a cours is a complete filing.
         subject_id: filing.subjectId,
@@ -291,6 +316,7 @@ export default function RecordClient({ prefill }: { prefill: Filing }) {
   }, [filing, finalTranscript, router]);
 
   const discardNote = useCallback(() => {
+    elapsedRef.current = 0;
     setFinalTranscript("");
     setInterimTranscript("");
     setErrorMessage(null);

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import https from "node:https";
 import crypto from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
+import { readRecordingAllowance } from "@/lib/quota";
 
 export const dynamic = "force-dynamic";
 
@@ -107,6 +108,18 @@ export async function POST() {
 
   if (!user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  // The gate sits here rather than only in the page: this route is what costs
+  // money, and a page's disabled button is a suggestion, not a control.
+  const allowance = await readRecordingAllowance(supabase);
+  if (!allowance.allowed) {
+    // 402: the request is well formed and the caller is who they say, but the
+    // free allowance is spent.
+    return NextResponse.json(
+      { error: "quota_exceeded", reason: allowance.reason },
+      { status: 402 }
+    );
   }
 
   const apiKey = process.env.DEEPGRAM_API_KEY;

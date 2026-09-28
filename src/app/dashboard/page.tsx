@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { formatDuration } from "@/lib/quota";
 
 function MicIcon() {
   return (
@@ -88,11 +89,17 @@ export default async function DashboardPage() {
   // same time as getUser rather than after it: the hub is the page the user
   // comes back to constantly, so its latency is two round trips overlapped
   // into one rather than four in sequence.
-  const [userRes, countsRes] = await Promise.all([
+  const [userRes, countsRes, usageRes] = await Promise.all([
     supabase.auth.getUser(),
     supabase
       .from("dashboard_counts")
       .select("note_count, sheet_count, course_count")
+      .single(),
+    supabase
+      .from("usage_summary")
+      .select(
+        "is_subscribed, free_sheets_used, free_sheet_allowance, recorded_seconds, free_recording_seconds"
+      )
       .single(),
   ]);
 
@@ -109,6 +116,7 @@ export default async function DashboardPage() {
     sheet_count: 0,
     course_count: 0,
   };
+  const usage = usageRes.data;
 
   const entries = [
     {
@@ -149,6 +157,34 @@ export default async function DashboardPage() {
     <main className="mx-auto w-full max-w-xl px-5 py-16 sm:px-8">
       <h1 className="font-display text-2xl font-medium text-ink">Note IA</h1>
       <p className="mt-1 text-sm text-ink-soft">{user.email}</p>
+
+      {/* The allowance is shown before it runs out, not only when it stops
+          something: finding the ceiling by hitting it is the unpleasant way. */}
+      {usage && !usage.is_subscribed && (
+        <p className="mt-3 text-sm text-ink-faint">
+          Offre gratuite : {usage.free_sheets_used}/{usage.free_sheet_allowance}{" "}
+          fiches ·{" "}
+          {formatDuration(usage.recorded_seconds)} sur{" "}
+          {formatDuration(usage.free_recording_seconds)} enregistrées{" "}
+          <Link
+            href="/dashboard/abonnement"
+            className="font-semibold text-terracotta-deep hover:underline"
+          >
+            Passer à l&apos;illimité
+          </Link>
+        </p>
+      )}
+      {usage?.is_subscribed && (
+        <p className="mt-3 text-sm text-ink-faint">
+          Abonnement actif — enregistrement et fiches illimités.{" "}
+          <Link
+            href="/dashboard/abonnement"
+            className="font-semibold text-terracotta-deep hover:underline"
+          >
+            Gérer
+          </Link>
+        </p>
+      )}
 
       <nav className="mt-10 flex flex-col gap-3">
         {entries.map((entry) => (

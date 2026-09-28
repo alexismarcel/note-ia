@@ -5,13 +5,21 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toErrorMessage } from "@/lib/errors";
 import { titleFromSheet } from "@/lib/notes/title";
+import QuotaLock from "../../quota-lock";
 
 type Props = {
   noteId: string;
   initialSheet: string | null;
+  // False once the ten free sheets are spent. The route refuses too; this only
+  // spares the user a click that would fail.
+  canGenerate: boolean;
 };
 
-export default function NoteAiSheet({ noteId, initialSheet }: Props) {
+export default function NoteAiSheet({
+  noteId,
+  initialSheet,
+  canGenerate,
+}: Props) {
   const router = useRouter();
   const [sheet, setSheet] = useState(initialSheet);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -33,6 +41,12 @@ export default function NoteAiSheet({ noteId, initialSheet }: Props) {
         method: "POST",
       });
       const body = await res.json().catch(() => ({}));
+      if (res.status === 402) {
+        // The ceiling was reached in another tab, or between render and click.
+        throw new Error(
+          "Tes 10 fiches gratuites sont utilisées. L'abonnement les débloque."
+        );
+      }
       if (!res.ok) {
         throw new Error(body.error ?? `Échec de la génération (${res.status})`);
       }
@@ -76,14 +90,21 @@ export default function NoteAiSheet({ noteId, initialSheet }: Props) {
 
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex items-center gap-3">
-        <button
-          onClick={generate}
-          disabled={isGenerating}
-          className="rounded-full bg-terracotta px-5 py-2.5 text-sm font-semibold text-cream transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
-          {isGenerating ? "Génération en cours…" : "Générer la fiche IA"}
-        </button>
+      {/* The lock replaces the generate button entirely, above the row rather
+          than inside it: it is a panel, not a control. A sheet already on file
+          still renders below, and can still be saved. */}
+      {!canGenerate && <QuotaLock reason="sheet_limit" />}
+
+      <div className="flex flex-wrap items-center gap-3">
+        {canGenerate && (
+          <button
+            onClick={generate}
+            disabled={isGenerating}
+            className="rounded-full bg-terracotta px-5 py-2.5 text-sm font-semibold text-cream transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {isGenerating ? "Génération en cours…" : "Générer la fiche IA"}
+          </button>
+        )}
 
         {hasUnsavedChanges && (
           <button

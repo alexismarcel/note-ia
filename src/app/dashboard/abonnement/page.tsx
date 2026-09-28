@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAuthFailure } from "@/lib/supabase/auth-error";
 import { isEntitled } from "@/lib/stripe";
 import { formatNoteDate } from "@/lib/notes/title";
+import { formatDuration } from "@/lib/quota";
 
 // Stripe's statuses, in French, for the one line the page shows.
 const STATUS_COPY: Record<string, string> = {
@@ -46,6 +47,13 @@ export default async function SubscriptionPage({
     console.error("[abonnement] query failed:", error);
   }
 
+  const { data: usage } = await supabase
+    .from("usage_summary")
+    .select(
+      "free_sheets_used, free_sheet_allowance, recorded_seconds, free_recording_seconds"
+    )
+    .single();
+
   const status = profile?.subscription_status ?? null;
   const active = isEntitled(status);
 
@@ -81,8 +89,26 @@ export default async function SubscriptionPage({
 
         {!active && (
           <>
+            {usage && (
+              <dl className="mt-4 flex flex-col gap-1 text-sm text-ink-soft">
+                <div className="flex justify-between gap-4">
+                  <dt>Fiches générées</dt>
+                  <dd className="tabular-nums">
+                    {usage.free_sheets_used} / {usage.free_sheet_allowance}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt>Temps enregistré</dt>
+                  <dd className="tabular-nums">
+                    {formatDuration(usage.recorded_seconds)} /{" "}
+                    {formatDuration(usage.free_recording_seconds)}
+                  </dd>
+                </div>
+              </dl>
+            )}
             <p className="mt-4 text-sm leading-relaxed text-ink-soft">
-              4,99 € par semaine, résiliable à tout moment.
+              Le premier des deux plafonds atteint bloque l&apos;enregistrement.
+              4,99 € par semaine lève les deux, résiliable à tout moment.
             </p>
             {/* A plain form post: the route answers 303 to Stripe's page, so
                 this works with no JavaScript and a refresh cannot re-post. */}

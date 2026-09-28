@@ -60,6 +60,16 @@ export default async function NotePage({
   const subject = subjectRes.data;
   const course = courseRes.data;
 
+  // Only the sheet ceiling closes generation; the 3 h ceiling deliberately
+  // leaves it open, which is the rule the product asked for.
+  const { data: usageRows } = await supabase
+    .from("usage_summary")
+    .select("is_subscribed, free_sheets_used, free_sheet_allowance")
+    .single();
+  const canGenerate =
+    usageRows?.is_subscribed === true ||
+    (usageRows?.free_sheets_used ?? 0) < (usageRows?.free_sheet_allowance ?? 0);
+
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-5 py-10 sm:px-8">
       <div>
@@ -109,7 +119,11 @@ export default async function NotePage({
         }}
       />
 
-      <NoteAiSheet noteId={note.id} initialSheet={note.ai_summary} />
+      <NoteAiSheet
+        noteId={note.id}
+        initialSheet={note.ai_summary}
+        canGenerate={canGenerate}
+      />
 
       <div>
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">

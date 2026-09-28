@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import type { SheetClaim } from "@/lib/quota";
 
 export const dynamic = "force-dynamic";
 
@@ -95,8 +96,37 @@ export async function POST(
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  // Claimed before the model is called, so two clicks cannot both slip
+  // through; given back below if the call produces nothing.
+  const { data: claimRows, error: claimError } = await supabase.rpc(
+    "claim_sheet_generation"
+  );
+  if (claimError) {
+    console.error("[summary] claim_sheet_generation failed:", claimError);
+    return NextResponse.json({ error: "quota_check_failed" }, { status: 500 });
+  }
+  const claim = (Array.isArray(claimRows) ? claimRows[0] : claimRows) as
+    | SheetClaim
+    | undefined;
+  if (!claim?.allowed) {
+    return NextResponse.json(
+      { error: "quota_exceeded", reason: claim?.reason ?? "no_profile" },
+      { status: 402 }
+    );
+  }
+  const claimedFree = claim.reason === "free";
+
+  // Every path out of here that is not a generated sheet must give the claim
+  // back, or a failed request would cost one of ten.
+  const refund = async () => {
+    if (!claimedFree) return;
+    const { error } = await supabase.rpc("refund_sheet_generation");
+    if (error) console.error("[summary] refund failed:", error);
+  };
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
+    await refund();
     return NextResponse.json(
       { error: "ANTHROPIC_API_KEY is not configured" },
       { status: 500 }
@@ -113,6 +143,7 @@ export async function POST(
     .single();
 
   if (error) {
+    await refund();
     return NextResponse.json(
       { error: `note_lookup_failed: ${error.message} (${error.code})` },
       { status: 404 }
@@ -121,6 +152,7 @@ export async function POST(
 
   const transcript = note.content?.trim();
   if (!transcript) {
+    await refund();
     return NextResponse.json(
       { error: "Cette note n'a pas de transcription à résumer." },
       { status: 400 }
@@ -169,6 +201,7 @@ export async function POST(
     );
 
     if (message.stop_reason === "refusal") {
+      await refund();
       return NextResponse.json(
         { error: "Claude a refusé de traiter cette transcription." },
         { status: 422 }
@@ -182,6 +215,7 @@ export async function POST(
       .trim();
 
     if (!sheet) {
+      await refund();
       return NextResponse.json(
         { error: "Réponse vide de Claude." },
         { status: 502 }
@@ -191,23 +225,28 @@ export async function POST(
     return NextResponse.json({ sheet });
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError) {
+      await refund();
       return NextResponse.json(
         { error: "Clé API Anthropic invalide." },
         { status: 502 }
       );
     }
     if (err instanceof Anthropic.RateLimitError) {
+      await refund();
       return NextResponse.json(
         { error: "Limite de requêtes atteinte, réessaie dans un instant." },
         { status: 429 }
       );
     }
     if (err instanceof Anthropic.APIError) {
+      await refund();
       return NextResponse.json(
         { error: `Erreur API Claude (${err.status}) : ${err.message}` },
         { status: 502 }
       );
     }
+    // An unexpected throw is still a request that produced no sheet.
+    await refund();
     throw err;
   }
 }
