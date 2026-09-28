@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { isAuthFailure } from "@/lib/supabase/auth-error";
 import { createClient } from "@/lib/supabase/server";
 import { filingLabel } from "@/lib/courses";
 import { formatNoteDate, noteDisplayTitle, titleFromSheet } from "@/lib/notes/title";
@@ -20,35 +21,26 @@ function sheetPreview(sheet: string): string {
 
 export default async function SheetsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  if (!user) {
+  // Same as the recordings list: 400 characters of sheet, which still holds
+  // its opening "# Titre" line — that heading is the note's display title.
+  const [notesRes, subjectRes, courseRes] = await Promise.all([
+    supabase
+      .from("note_previews")
+      .select("id, title, summary_preview, created_at, subject_id, course_id")
+      .eq("has_summary", true)
+      .order("created_at", { ascending: false }),
+    supabase.from("subjects").select("id, name"),
+    supabase.from("courses").select("id, title"),
+  ]);
+
+  const error = notesRes.error;
+  if (isAuthFailure(error)) {
     redirect("/login");
   }
-
-  // content is left out: this view shows the sheet, never the transcript,
-  // and a lecture transcript is by far the heaviest column on the row.
-  const { data: notes, error } = await supabase
-    .from("notes")
-    .select("id, title, ai_summary, created_at, subject_id, course_id")
-    .eq("user_id", user.id)
-    .not("ai_summary", "is", null)
-    .order("created_at", { ascending: false });
-
   if (error) {
     console.error("[fiches] query failed:", error);
   }
-
-  // Two extra queries for the whole list rather than embedded resources per
-  // row: the label is the only thing needed, and a nested select that stops
-  // resolving would take the list down with it.
-  const [subjectRes, courseRes] = await Promise.all([
-    supabase.from("subjects").select("id, name").eq("user_id", user.id),
-    supabase.from("courses").select("id, title").eq("user_id", user.id),
-  ]);
-
   if (subjectRes.error ?? courseRes.error) {
     console.error(
       "[fiches] filing labels failed:",
@@ -56,6 +48,7 @@ export default async function SheetsPage() {
     );
   }
 
+  const notes = notesRes.data;
   const subjectNames = new Map(
     (subjectRes.data ?? []).map((subject) => [subject.id, subject.name])
   );
@@ -94,7 +87,8 @@ export default async function SheetsPage() {
                 className="min-w-0 flex-1"
               >
                 <h2 className="font-display text-lg font-medium text-ink">
-                  {titleFromSheet(note.ai_summary) ?? noteDisplayTitle(note)}
+                  {titleFromSheet(note.summary_preview) ??
+                    noteDisplayTitle({ ...note, ai_summary: note.summary_preview })}
                 </h2>
                 <time
                   dateTime={note.created_at}
@@ -109,7 +103,7 @@ export default async function SheetsPage() {
                   )}
                 </span>
                 <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-ink-soft">
-                  {sheetPreview(note.ai_summary ?? "")}
+                  {sheetPreview(note.summary_preview ?? "")}
                 </p>
               </Link>
               <DeleteButton

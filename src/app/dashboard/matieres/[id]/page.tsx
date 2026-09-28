@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { isAuthFailure } from "@/lib/supabase/auth-error";
 import { createClient } from "@/lib/supabase/server";
 import { byCourseTitle, countLabel } from "@/lib/courses";
 import { formatNoteDate, noteDisplayTitle } from "@/lib/notes/title";
@@ -13,13 +14,6 @@ export default async function SubjectPage({
   const { id } = await params;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
 
   // All three key off the id in the URL, so they go out together rather than
   // paying a round trip each in sequence.
@@ -30,14 +24,17 @@ export default async function SubjectPage({
       .select("id, title, subject_id, created_at")
       .eq("subject_id", id),
     supabase
-      .from("notes")
-      .select("id, title, ai_summary, created_at, course_id")
+      .from("note_previews")
+      .select("id, title, summary_preview, created_at, course_id")
       .eq("subject_id", id)
       .order("created_at", { ascending: false }),
   ]);
 
   const { data: subject, error: subjectError } = subjectRes;
 
+  if (isAuthFailure(subjectError)) {
+    redirect("/login");
+  }
   if (subjectError) {
     // PGRST116: no row — the matière does not exist, or RLS hides someone
     // else's. Both are a 404 from here.
@@ -169,7 +166,7 @@ export default async function SubjectPage({
                     {formatNoteDate(note.created_at)}
                   </time>
                   <span className="mt-1 block font-display text-base font-medium text-ink">
-                    {noteDisplayTitle(note)}
+                    {noteDisplayTitle({ ...note, ai_summary: note.summary_preview })}
                   </span>
                 </Link>
               </li>

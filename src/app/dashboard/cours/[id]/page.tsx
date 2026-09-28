@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { isAuthFailure } from "@/lib/supabase/auth-error";
 import { createClient } from "@/lib/supabase/server";
 import { countLabel } from "@/lib/courses";
 import { formatNoteDate, noteDisplayTitle } from "@/lib/notes/title";
@@ -13,13 +14,6 @@ export default async function CoursePage({
   const { id } = await params;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
 
   // Both queries key off the id in the URL, not off each other, so they go out
   // together: waiting for the cours before asking for its séances cost a full
@@ -41,6 +35,9 @@ export default async function CoursePage({
 
   const { data: course, error: courseError } = courseRes;
 
+  if (isAuthFailure(courseError)) {
+    redirect("/login");
+  }
   if (courseError) {
     if (courseError.code === "PGRST116") {
       notFound();

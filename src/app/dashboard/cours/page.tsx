@@ -1,31 +1,26 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { isAuthFailure } from "@/lib/supabase/auth-error";
 import { createClient } from "@/lib/supabase/server";
 import { bySubjectName, countLabel } from "@/lib/courses";
 import QuickAdd from "./quick-add";
 
 export default async function SubjectsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
 
   // Three flat queries instead of nested aggregates: the counts are folded in
   // JS below, which keeps a failure attributable to one table.
   const [subjectRes, courseRes, noteRes] = await Promise.all([
-    supabase.from("subjects").select("id, name").eq("user_id", user.id),
-    supabase.from("courses").select("id, subject_id").eq("user_id", user.id),
-    supabase
-      .from("notes")
-      .select("id, subject_id")
-      .eq("user_id", user.id),
+    supabase.from("subjects").select("id, name"),
+    supabase.from("courses").select("id, subject_id"),
+    // Only the two light columns: no transcript, no sheet.
+    supabase.from("notes").select("id, subject_id"),
   ]);
 
   const error = subjectRes.error ?? courseRes.error ?? noteRes.error;
+  if (isAuthFailure(error)) {
+    redirect("/login");
+  }
   if (error) {
     console.error("[cours] query failed:", error);
   }

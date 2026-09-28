@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { isAuthFailure } from "@/lib/supabase/auth-error";
 import { createClient } from "@/lib/supabase/server";
 import { filingLabel } from "@/lib/courses";
 import { formatNoteDate } from "@/lib/notes/title";
@@ -7,34 +8,27 @@ import DeleteButton from "../delete-button";
 
 export default async function RecordingsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  if (!user) {
+  // note_previews carries 400 characters of transcript instead of the whole
+  // thing: this list clamps to two lines, and a two-hour lecture is ~100 KB.
+  // No getUser and no user_id filter — the proxy has already turned away a
+  // signed-out visitor, and RLS scopes every row to its owner.
+  const [notesRes, subjectRes, courseRes] = await Promise.all([
+    supabase
+      .from("note_previews")
+      .select("id, content_preview, created_at, subject_id, course_id")
+      .order("created_at", { ascending: false }),
+    supabase.from("subjects").select("id, name"),
+    supabase.from("courses").select("id, title"),
+  ]);
+
+  const error = notesRes.error;
+  if (isAuthFailure(error)) {
     redirect("/login");
   }
-
-  // ai_summary is left out on purpose: this view is the raw capture, listed
-  // by date, so the sheet has nothing to say here.
-  const { data: notes, error } = await supabase
-    .from("notes")
-    .select("id, content, created_at, subject_id, course_id")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
-
   if (error) {
     console.error("[enregistrements] query failed:", error);
   }
-
-  // Two extra queries for the whole list rather than embedded resources per
-  // row: the label is the only thing needed, and a nested select that stops
-  // resolving would take the list down with it.
-  const [subjectRes, courseRes] = await Promise.all([
-    supabase.from("subjects").select("id, name").eq("user_id", user.id),
-    supabase.from("courses").select("id, title").eq("user_id", user.id),
-  ]);
-
   if (subjectRes.error ?? courseRes.error) {
     console.error(
       "[enregistrements] filing labels failed:",
@@ -42,6 +36,7 @@ export default async function RecordingsPage() {
     );
   }
 
+  const notes = notesRes.data;
   const subjectNames = new Map(
     (subjectRes.data ?? []).map((subject) => [subject.id, subject.name])
   );
@@ -92,7 +87,7 @@ export default async function RecordingsPage() {
                   )}
                 </span>
                 <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-ink-soft">
-                  {note.content || "Aucune transcription."}
+                  {note.content_preview || "Aucune transcription."}
                 </p>
               </Link>
               <DeleteButton

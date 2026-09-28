@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { isAuthFailure } from "@/lib/supabase/auth-error";
 import { createClient } from "@/lib/supabase/server";
 import { formatNoteDate, noteDisplayTitle } from "@/lib/notes/title";
 import CoursePicker from "../../course-picker";
@@ -11,13 +12,6 @@ export default async function NotePage({
   const { id } = await params;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
 
   const { data: note, error } = await supabase
     .from("notes")
@@ -25,6 +19,9 @@ export default async function NotePage({
     .eq("id", id)
     .single();
 
+  if (isAuthFailure(error)) {
+    redirect("/login");
+  }
   if (error) {
     // PGRST116 is "no rows returned" — either the note does not exist or RLS
     // hides someone else's. Anything else is a real failure worth showing.

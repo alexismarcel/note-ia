@@ -83,32 +83,32 @@ function SheetIcon() {
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
+  // One row instead of three separate count requests, and it goes out at the
+  // same time as getUser rather than after it: the hub is the page the user
+  // comes back to constantly, so its latency is two round trips overlapped
+  // into one rather than four in sequence.
+  const [userRes, countsRes] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase
+      .from("dashboard_counts")
+      .select("note_count, sheet_count, course_count")
+      .single(),
+  ]);
+
+  const user = userRes.data.user;
   if (!user) {
     redirect("/login");
   }
 
-  // head: true asks for the count alone — no note bodies cross the wire just
-  // to put a number on a card.
-  const [{ count: rawCount }, { count: sheetCount }, { count: courseCount }] =
-    await Promise.all([
-      supabase
-        .from("notes")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user.id),
-      supabase
-        .from("notes")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .not("ai_summary", "is", null),
-      supabase
-        .from("courses")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user.id),
-    ]);
+  if (countsRes.error) {
+    console.error("[dashboard] counts failed:", countsRes.error);
+  }
+  const counts = countsRes.data ?? {
+    note_count: 0,
+    sheet_count: 0,
+    course_count: 0,
+  };
 
   const entries = [
     {
@@ -124,7 +124,7 @@ export default async function DashboardPage() {
       icon: <StackIcon />,
       title: "Mes cours",
       body: "Rangés par matière, séance après séance.",
-      meta: courseCount,
+      meta: counts.course_count,
       primary: false,
     },
     {
@@ -132,7 +132,7 @@ export default async function DashboardPage() {
       icon: <WaveIcon />,
       title: "Mes enregistrements",
       body: "Les transcriptions brutes, telles que captées.",
-      meta: rawCount,
+      meta: counts.note_count,
       primary: false,
     },
     {
@@ -140,7 +140,7 @@ export default async function DashboardPage() {
       icon: <SheetIcon />,
       title: "Mes fiches IA",
       body: "Les cours mis au propre, prêts à réviser.",
-      meta: sheetCount,
+      meta: counts.sheet_count,
       primary: false,
     },
   ];
