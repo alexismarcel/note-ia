@@ -7,6 +7,43 @@
 --
 --   subjects (matière) 1 ── n courses (cours) 1 ── n notes (séances)
 
+-- 0. An unrelated public.courses already in the way ----------------------
+-- "create table if not exists" is silent about a table that exists with a
+-- different shape: it creates nothing, and every later statement fails on a
+-- column that was never added ("column courses.subject_id does not exist"),
+-- taking the whole migration down with it. This database had exactly that — a
+-- courses table with a `subject` column, predating this feature and used by
+-- nothing in the app.
+--
+-- The stray table is moved aside, never dropped: whatever it holds is still
+-- readable at public.courses_legacy_20260928.
+do $$
+begin
+  if to_regclass('public.courses') is null then
+    return;
+  end if;
+
+  -- Already the shape this migration expects (a re-run): leave it alone.
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'courses'
+      and column_name = 'subject_id'
+  ) then
+    return;
+  end if;
+
+  if to_regclass('public.courses_legacy_20260928') is not null then
+    raise exception
+      'public.courses has an unexpected shape and courses_legacy_20260928 is taken; rename one of them by hand first.';
+  end if;
+
+  alter table public.courses rename to courses_legacy_20260928;
+  raise notice
+    'public.courses had an unexpected shape and was renamed to courses_legacy_20260928; its rows are intact.';
+end $$;
+
 -- 1. Courses -------------------------------------------------------------
 create table if not exists public.courses (
   id uuid primary key default gen_random_uuid(),
@@ -38,6 +75,24 @@ create trigger courses_set_updated_at
 -- 2. Notes belong to a cours ---------------------------------------------
 -- on delete set null: deleting a cours regroups its notes, it does not destroy
 -- recordings the user spent two hours capturing.
+-- Same trap as above, one column down: "add column if not exists" would keep
+-- a course_id of the wrong type without a word.
+do $$
+declare
+  existing text;
+begin
+  select data_type into existing
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name = 'notes'
+    and column_name = 'course_id';
+
+  if existing is not null and existing <> 'uuid' then
+    raise exception
+      'notes.course_id already exists as % — expected uuid; rename or drop it first.', existing;
+  end if;
+end $$;
+
 alter table public.notes
   add column if not exists course_id uuid references public.courses (id) on delete set null;
 
@@ -75,8 +130,23 @@ create policy "Users manage their own notes"
 -- 4. One matière per name per user ---------------------------------------
 -- The picker creates a matière from a typed name; without this, "Maths" typed
 -- twice would split one matière into two entries in the navigation.
-create unique index if not exists subjects_user_id_name_key
-  on public.subjects (user_id, lower(name));
+-- Skipped rather than fatal if the database already holds duplicates: the
+-- index is a guard for what comes next, not worth aborting a migration whose
+-- other statements this database needs.
+do $$
+begin
+  if exists (
+    select 1 from public.subjects
+    group by user_id, lower(name)
+    having count(*) > 1
+  ) then
+    raise notice
+      'subjects_user_id_name_key skipped: duplicate matière names already exist. Merge them, then re-run this migration.';
+  else
+    create unique index if not exists subjects_user_id_name_key
+      on public.subjects (user_id, lower(name));
+  end if;
+end $$;
 
 -- 5. Privileges ----------------------------------------------------------
 -- RLS is consulted only after the role holds the table privilege; see
