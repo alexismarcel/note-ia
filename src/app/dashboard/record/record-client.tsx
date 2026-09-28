@@ -40,6 +40,18 @@ const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// "12:04", "1:02:37" — the same number the free allowance counts, so what is
+// on screen and what is billed can never tell different stories.
+function formatClock(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  const mm = String(minutes).padStart(hours > 0 ? 2 : 1, "0");
+  const ss = String(seconds).padStart(2, "0");
+  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
 export default function RecordClient({ prefill }: { prefill: Filing }) {
   const router = useRouter();
   const [status, setStatus] = useState<Status>("idle");
@@ -49,6 +61,9 @@ export default function RecordClient({ prefill }: { prefill: Filing }) {
   const [interimTranscript, setInterimTranscript] = useState("");
   // Already resolved from the URL by the server component above.
   const [filing, setFiling] = useState<Filing>(prefill);
+  // Displayed only; elapsedRef stays the source of truth, so the clock on
+  // screen and the duration saved come from the same accumulator.
+  const [elapsedMs, setElapsedMs] = useState(0);
 
   const vadRef = useRef<MicVAD | null>(null);
   const sttRef = useRef<SttConnection | null>(null);
@@ -77,12 +92,27 @@ export default function RecordClient({ prefill }: { prefill: Filing }) {
     if (segmentStartedAtRef.current === null) return;
     elapsedRef.current += Date.now() - segmentStartedAtRef.current;
     segmentStartedAtRef.current = null;
+    // Settle the display on the exact figure rather than leaving it on
+    // whatever the last tick happened to show.
+    setElapsedMs(elapsedRef.current);
   }, []);
 
   const markListening = useCallback(() => {
     segmentStartedAtRef.current = Date.now();
+    setElapsedMs(elapsedRef.current);
     setStatus("listening");
   }, []);
+
+  // Ticks only while the microphone is live: a pause, an interruption or the
+  // end of the recording freezes it, exactly as the accumulator does.
+  useEffect(() => {
+    if (status !== "listening") return;
+    const id = setInterval(() => {
+      const started = segmentStartedAtRef.current;
+      setElapsedMs(elapsedRef.current + (started ? Date.now() - started : 0));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [status]);
 
   const teardown = useCallback(async () => {
     if (vadRef.current) {
@@ -318,6 +348,7 @@ export default function RecordClient({ prefill }: { prefill: Filing }) {
 
   const discardNote = useCallback(() => {
     elapsedRef.current = 0;
+    setElapsedMs(0);
     setFinalTranscript("");
     setInterimTranscript("");
     setErrorMessage(null);
@@ -365,6 +396,21 @@ export default function RecordClient({ prefill }: { prefill: Filing }) {
             </span>
             Arrêter l&apos;enregistrement
           </button>
+        )}
+
+        {/* The clock earns its place beside the status: it says how much of the
+            free allowance this recording is spending, while it spends it. */}
+        {(isRecording || elapsedMs > 0) && (
+          <span
+            className={
+              status === "listening"
+                ? "shrink-0 font-display text-xl tabular-nums text-ink"
+                : "shrink-0 font-display text-xl tabular-nums text-ink-faint"
+            }
+            aria-label="Durée de l'enregistrement"
+          >
+            {formatClock(elapsedMs)}
+          </span>
         )}
 
         <div className="text-sm">
