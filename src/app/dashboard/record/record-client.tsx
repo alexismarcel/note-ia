@@ -293,8 +293,9 @@ export default function RecordClient({ prefill }: { prefill: Filing }) {
         content,
         source_type: "audio",
         // Rounded up: a 40-second recording that stored 0 would be free
-        // capture. The browser measures it, which is the only place that
-        // knows — see the note in the migration.
+        // capture. This is a claim, not a measurement the server can trust —
+        // notes_floor_duration() raises it to the minimum time the transcript
+        // could have taken to speak, so understating it here is pointless.
         duration_seconds: Math.ceil(elapsedRef.current / 1000),
         // null is a legitimate answer on both: a note can be filed later from
         // its own page. A matière without a cours is a complete filing.
