@@ -1,14 +1,17 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
- * Démo animée de Note IA — 30 s, en boucle.
- * Se lance quand le composant entre dans le viewport, se met en pause quand il en sort.
+ * Démo animée de Note IA — 30 s.
+ * Affiche une image fixe (la fiche terminée) sous un bouton lecture ; la démo ne se
+ * lance qu’au clic, joue une fois, puis revient à l’image fixe.
  * Aucune dépendance, aucun fichier vidéo.
  */
 export default function DemoNoteIA() {
   const rootRef = useRef<HTMLDivElement>(null);
+  const playRef = useRef<(() => void) | null>(null);
+  const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -271,11 +274,9 @@ export default function DemoNoteIA() {
 
     steps.sort((a, b) => a.t - b.t);
 
-    /* ---------- lecture en boucle ---------- */
+    /* ---------- lecture au clic ---------- */
     let timers: ReturnType<typeof setTimeout>[] = [];
-    let loopTimer: ReturnType<typeof setTimeout> | null = null;
-    let visible = false;
-    let playing = false;
+    let endTimer: ReturnType<typeof setTimeout> | null = null;
 
     const reset = () => {
       timers.forEach(clearTimeout);
@@ -316,7 +317,7 @@ export default function DemoNoteIA() {
       outro.classList.remove('nia-in');
     };
 
-    /* état final figé si l’utilisateur a désactivé les animations */
+    /* image fixe affichée avant la lecture et après */
     const still = () => {
       field.classList.add('nia-collapsed');
       select.classList.add('nia-filled');
@@ -327,44 +328,26 @@ export default function DemoNoteIA() {
       sheet.querySelectorAll('.nia-rise').forEach((el) => el.classList.add('nia-in'));
     };
 
-    const reduced =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
     const play = () => {
       reset();
-      playing = true;
-      steps.forEach((s) => timers.push(setTimeout(s.fn, s.t)));
-      loopTimer = setTimeout(() => {
-        if (visible) play();
-        else {
-          playing = false;
-          reset();
-        }
+      setPlaying(true);
+      steps.forEach((st) => timers.push(setTimeout(st.fn, st.t)));
+      endTimer = setTimeout(() => {
+        reset();
+        still();
+        setPlaying(false);
       }, 32500);
     };
 
-    let io: IntersectionObserver | null = null;
-
-    if (reduced) {
-      still();
-    } else {
-      io = new IntersectionObserver(
-        (entries) => {
-          visible = entries[0].isIntersecting;
-          if (visible && !playing) play();
-        },
-        { threshold: 0.35 }
-      );
-      io.observe(outer);
-    }
+    still();
+    playRef.current = play;
 
     return () => {
       timers.forEach(clearTimeout);
-      if (loopTimer) clearTimeout(loopTimer);
+      if (endTimer) clearTimeout(endTimer);
       stopTimer();
       ro.disconnect();
-      io?.disconnect();
+      playRef.current = null;
     };
   }, []);
 
@@ -713,6 +696,22 @@ export default function DemoNoteIA() {
             </p>
           </div>
         </div>
+
+        {!playing && (
+          <button
+            className="nia-play"
+            type="button"
+            onClick={() => playRef.current?.()}
+            aria-label="Lancer la démo de Note IA"
+          >
+            <span className="nia-play-btn">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <polygon points="6 3 20 12 6 21 6 3" />
+              </svg>
+            </span>
+            <span className="nia-play-label">Voir Note IA en action</span>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -838,6 +837,15 @@ const CSS = `
 .nia-outro-name{font-family:var(--nia-display);font-size:40px;font-weight:600;color:var(--nia-ink)}
 .nia-outro-line{margin:0;font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--nia-deep)}
 .nia-outro-tag{margin:0;font-size:19px;color:var(--nia-muted);text-align:center;max-width:540px;line-height:1.45}
+.nia-play{position:absolute;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;border:0;padding:0;margin:0;cursor:pointer;background:rgba(251,244,236,.55);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);font-family:var(--nia-body);color:var(--nia-ink)}
+.nia-play-btn{width:84px;height:84px;border-radius:50%;background:var(--nia-ink);color:var(--nia-bg);display:flex;align-items:center;justify-content:center;box-shadow:0 12px 30px rgba(43,33,26,.3);transition:transform .2s ease}
+.nia-play-btn svg{margin-left:4px}
+.nia-play:hover .nia-play-btn,.nia-play:focus-visible .nia-play-btn{transform:scale(1.06)}
+.nia-play:focus-visible{outline:3px solid var(--nia-accent);outline-offset:-3px}
+.nia-play-label{font-family:var(--nia-display);font-size:20px;font-weight:600}
+.nia-narrow .nia-play-btn{width:64px;height:64px}
+.nia-narrow .nia-play-btn svg{width:20px;height:20px}
+.nia-narrow .nia-play-label{font-size:17px}
 @media (prefers-reduced-motion:reduce){
 .nia-wave.nia-on i{animation:none;height:12px}
 .nia-rec.nia-live .nia-dot{animation:none}
