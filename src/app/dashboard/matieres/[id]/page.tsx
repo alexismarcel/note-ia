@@ -2,8 +2,9 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { byCourseTitle, countLabel } from "@/lib/courses";
-import { formatNoteDate } from "@/lib/notes/title";
+import { formatNoteDate, noteDisplayTitle } from "@/lib/notes/title";
 import GroupDeleteButton from "../../cours/group-delete-button";
+import QuickAdd from "../../cours/quick-add";
 
 export default async function SubjectPage({
   params,
@@ -41,38 +42,39 @@ export default async function SubjectPage({
     );
   }
 
-  const { data: courses, error: coursesError } = await supabase
-    .from("courses")
-    .select("id, title, created_at")
-    .eq("subject_id", subject.id)
-    .order("created_at", { ascending: false });
-
-  if (coursesError) {
-    console.error("[matiere] courses query failed:", coursesError);
-  }
-
-  const courseIds = (courses ?? []).map((c) => c.id);
-  const notesByCourse = new Map<string, number>();
-  if (courseIds.length > 0) {
-    const { data: notes, error: notesError } = await supabase
+  const [courseRes, noteRes] = await Promise.all([
+    supabase
+      .from("courses")
+      .select("id, title, subject_id, created_at")
+      .eq("subject_id", subject.id),
+    supabase
       .from("notes")
-      .select("id, course_id")
-      .in("course_id", courseIds);
-    if (notesError) {
-      console.error("[matiere] notes count failed:", notesError);
-    }
-    for (const note of notes ?? []) {
-      if (!note.course_id) continue;
-      notesByCourse.set(
-        note.course_id,
-        (notesByCourse.get(note.course_id) ?? 0) + 1
-      );
-    }
+      .select("id, title, ai_summary, created_at, course_id")
+      .eq("subject_id", subject.id)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (courseRes.error) {
+    console.error("[matiere] courses query failed:", courseRes.error);
+  }
+  if (noteRes.error) {
+    console.error("[matiere] notes query failed:", noteRes.error);
   }
 
-  const sorted = (courses ?? [])
-    .map((c) => ({ ...c, subject_id: subject.id }))
-    .sort(byCourseTitle);
+  const courses = (courseRes.data ?? []).sort(byCourseTitle);
+  const notes = noteRes.data ?? [];
+
+  const notesByCourse = new Map<string, number>();
+  // Notes filed in the matière but in no cours: they would be invisible if the
+  // page only listed cours.
+  const loose = notes.filter((note) => {
+    if (!note.course_id) return true;
+    notesByCourse.set(
+      note.course_id,
+      (notesByCourse.get(note.course_id) ?? 0) + 1
+    );
+    return false;
+  });
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 py-10 sm:px-8">
@@ -88,7 +90,8 @@ export default async function SubjectPage({
             {subject.name}
           </h1>
           <p className="mt-1 text-sm text-ink-soft">
-            {countLabel(sorted.length, "cours", "cours")} dans cette matière.
+            {countLabel(courses.length, "cours", "cours")} ·{" "}
+            {countLabel(notes.length, "note")}
           </p>
         </div>
         <GroupDeleteButton
@@ -98,9 +101,17 @@ export default async function SubjectPage({
         />
       </div>
 
-      {sorted.length > 0 ? (
+      <Link
+        href={`/dashboard/record?matiere=${subject.id}`}
+        className="mt-6 inline-flex items-center gap-2.5 rounded-full bg-terracotta px-5 py-2.5 text-sm font-semibold text-cream transition-opacity hover:opacity-90"
+      >
+        <span className="h-2.5 w-2.5 rounded-full bg-cream/70" />
+        Enregistrer dans cette matière
+      </Link>
+
+      {courses.length > 0 ? (
         <ul className="mt-8 flex flex-col gap-3">
-          {sorted.map((course) => (
+          {courses.map((course) => (
             <li key={course.id}>
               <Link
                 href={`/dashboard/cours/${course.id}`}
@@ -123,17 +134,40 @@ export default async function SubjectPage({
           ))}
         </ul>
       ) : (
-        <div className="mt-8 rounded-2xl border border-dashed border-line px-6 py-12 text-center">
-          <p className="text-sm text-ink-soft">
-            Aucun cours dans cette matière pour le moment.
-          </p>
-          <Link
-            href="/dashboard/record"
-            className="mt-4 inline-block text-sm font-semibold text-terracotta-deep hover:underline"
-          >
-            Enregistrer un cours
-          </Link>
-        </div>
+        <p className="mt-8 rounded-2xl border border-dashed border-line px-6 py-10 text-center text-sm text-ink-soft">
+          Aucun cours dans cette matière. Tu peux enregistrer sans en créer : la
+          note se rangera ici.
+        </p>
+      )}
+
+      <QuickAdd mode="course" subjectId={subject.id} />
+
+      {loose.length > 0 && (
+        <section className="mt-10">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            Dans cette matière, hors cours
+          </h2>
+          <ul className="mt-3 flex flex-col gap-3">
+            {loose.map((note) => (
+              <li key={note.id}>
+                <Link
+                  href={`/dashboard/notes/${note.id}`}
+                  className="block rounded-2xl border border-line-soft bg-white p-5 transition-colors hover:border-line-warm"
+                >
+                  <time
+                    dateTime={note.created_at}
+                    className="text-xs text-ink-faint"
+                  >
+                    {formatNoteDate(note.created_at)}
+                  </time>
+                  <span className="mt-1 block font-display text-base font-medium text-ink">
+                    {noteDisplayTitle(note)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </main>
   );

@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { floatTo16BitPCM } from "@/lib/deepgram/pcm";
 import { toErrorMessage } from "@/lib/errors";
 import { formatNoteDate } from "@/lib/notes/title";
-import CoursePicker from "../course-picker";
+import CoursePicker, { type Filing } from "../course-picker";
 import {
   connectStt,
   resolveProvider,
@@ -45,12 +45,15 @@ export default function RecordClient() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [finalTranscript, setFinalTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
-  // "Enregistrer une séance" from a cours page arrives as ?cours=<id>, so the
-  // recording is filed before it starts. Read during render rather than in an
-  // effect: an effect that calls setState only to copy the URL in causes a
-  // second render for nothing.
-  const prefilledCourseId = useSearchParams().get("cours");
-  const [courseId, setCourseId] = useState<string | null>(prefilledCourseId);
+  // "Enregistrer dans cette matière" / "une séance" arrive as ?matiere=<id> or
+  // ?cours=<id>, so the recording is filed before it starts. Read during render
+  // rather than in an effect: an effect that calls setState only to copy the
+  // URL in causes a second render for nothing.
+  const searchParams = useSearchParams();
+  const [filing, setFiling] = useState<Filing>({
+    subjectId: searchParams.get("matiere"),
+    courseId: searchParams.get("cours"),
+  });
 
   const vadRef = useRef<MicVAD | null>(null);
   const sttRef = useRef<SttConnection | null>(null);
@@ -272,9 +275,10 @@ export default function RecordClient() {
         title: `Note du ${formatNoteDate(new Date())}`,
         content,
         source_type: "audio",
-        // null is a legitimate answer: a note can be filed into a cours later
-        // from its own page.
-        course_id: courseId,
+        // null is a legitimate answer on both: a note can be filed later from
+        // its own page. A matière without a cours is a complete filing.
+        subject_id: filing.subjectId,
+        course_id: filing.courseId,
       });
       if (error) throw error;
 
@@ -288,7 +292,7 @@ export default function RecordClient() {
       setErrorMessage(toErrorMessage(err));
       setStatus("stopped");
     }
-  }, [courseId, finalTranscript, router]);
+  }, [filing, finalTranscript, router]);
 
   const discardNote = useCallback(() => {
     setFinalTranscript("");
@@ -313,7 +317,7 @@ export default function RecordClient() {
       {/* Kept visible during and after the recording: the choice can be made
           before starting, or once the lecture turns out to be about something
           else than planned. */}
-      <CoursePicker mode="draft" value={courseId} onChange={setCourseId} />
+      <CoursePicker mode="draft" value={filing} onChange={setFiling} />
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         {!isRecording ? (

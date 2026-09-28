@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { filingLabel } from "@/lib/courses";
 import { formatNoteDate } from "@/lib/notes/title";
 import DeleteButton from "../delete-button";
 
@@ -18,7 +19,7 @@ export default async function RecordingsPage() {
   // by date, so the sheet has nothing to say here.
   const { data: notes, error } = await supabase
     .from("notes")
-    .select("id, content, created_at, course_id")
+    .select("id, content, created_at, subject_id, course_id")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -26,20 +27,26 @@ export default async function RecordingsPage() {
     console.error("[enregistrements] query failed:", error);
   }
 
-  // One extra query for the whole list rather than an embedded resource per
+  // Two extra queries for the whole list rather than embedded resources per
   // row: the label is the only thing needed, and a nested select that stops
   // resolving would take the list down with it.
-  const { data: courses, error: coursesError } = await supabase
-    .from("courses")
-    .select("id, title")
-    .eq("user_id", user.id);
+  const [subjectRes, courseRes] = await Promise.all([
+    supabase.from("subjects").select("id, name").eq("user_id", user.id),
+    supabase.from("courses").select("id, title").eq("user_id", user.id),
+  ]);
 
-  if (coursesError) {
-    console.error("[enregistrements] courses query failed:", coursesError);
+  if (subjectRes.error ?? courseRes.error) {
+    console.error(
+      "[enregistrements] filing labels failed:",
+      subjectRes.error ?? courseRes.error
+    );
   }
 
+  const subjectNames = new Map(
+    (subjectRes.data ?? []).map((subject) => [subject.id, subject.name])
+  );
   const courseTitles = new Map(
-    (courses ?? []).map((course) => [course.id, course.title])
+    (courseRes.data ?? []).map((course) => [course.id, course.title])
   );
 
   return (
@@ -79,8 +86,10 @@ export default async function RecordingsPage() {
                   {formatNoteDate(note.created_at)}
                 </time>
                 <span className="mt-1 block text-xs text-ink-faint">
-                  {(note.course_id && courseTitles.get(note.course_id)) ||
-                    "Non classé"}
+                  {filingLabel(
+                    note.subject_id ? subjectNames.get(note.subject_id) : undefined,
+                    note.course_id ? courseTitles.get(note.course_id) : undefined
+                  )}
                 </span>
                 <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-ink-soft">
                   {note.content || "Aucune transcription."}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { bySubjectName, countLabel } from "@/lib/courses";
+import QuickAdd from "./quick-add";
 
 export default async function SubjectsPage() {
   const supabase = await createClient();
@@ -17,11 +18,11 @@ export default async function SubjectsPage() {
   // JS below, which keeps a failure attributable to one table.
   const [subjectRes, courseRes, noteRes] = await Promise.all([
     supabase.from("subjects").select("id, name").eq("user_id", user.id),
+    supabase.from("courses").select("id, subject_id").eq("user_id", user.id),
     supabase
-      .from("courses")
+      .from("notes")
       .select("id, subject_id")
       .eq("user_id", user.id),
-    supabase.from("notes").select("id, course_id").eq("user_id", user.id),
   ]);
 
   const error = subjectRes.error ?? courseRes.error ?? noteRes.error;
@@ -32,24 +33,26 @@ export default async function SubjectsPage() {
   const courses = courseRes.data ?? [];
   const notes = noteRes.data ?? [];
 
-  const notesByCourse = new Map<string, number>();
+  // notes.subject_id is kept in step with the cours' matière by a trigger, so
+  // it counts a note filed either way.
+  const notesBySubject = new Map<string, number>();
   let unclassified = 0;
   for (const note of notes) {
-    if (!note.course_id) {
+    if (!note.subject_id) {
       unclassified += 1;
       continue;
     }
-    notesByCourse.set(note.course_id, (notesByCourse.get(note.course_id) ?? 0) + 1);
+    notesBySubject.set(
+      note.subject_id,
+      (notesBySubject.get(note.subject_id) ?? 0) + 1
+    );
   }
 
-  const subjects = (subjectRes.data ?? []).sort(bySubjectName).map((subject) => {
-    const own = courses.filter((c) => c.subject_id === subject.id);
-    return {
-      ...subject,
-      courseCount: own.length,
-      noteCount: own.reduce((sum, c) => sum + (notesByCourse.get(c.id) ?? 0), 0),
-    };
-  });
+  const subjects = (subjectRes.data ?? []).sort(bySubjectName).map((subject) => ({
+    ...subject,
+    courseCount: courses.filter((c) => c.subject_id === subject.id).length,
+    noteCount: notesBySubject.get(subject.id) ?? 0,
+  }));
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 py-10 sm:px-8">
@@ -63,7 +66,7 @@ export default async function SubjectsPage() {
         Mes cours
       </h1>
       <p className="mt-1 text-sm text-ink-soft">
-        Vos matières, et dans chacune les cours que vos séances composent.
+        Pose tes matières ici. Elles seront proposées au moment d&apos;enregistrer.
       </p>
 
       {error ? (
@@ -84,7 +87,7 @@ export default async function SubjectsPage() {
                   </span>
                   <span className="block text-sm text-ink-soft">
                     {countLabel(subject.courseCount, "cours", "cours")} ·{" "}
-                    {countLabel(subject.noteCount, "séance")}
+                    {countLabel(subject.noteCount, "note")}
                   </span>
                 </span>
                 <span aria-hidden="true" className="shrink-0 text-ink-faint">
@@ -95,25 +98,19 @@ export default async function SubjectsPage() {
           ))}
         </ul>
       ) : (
-        <div className="mt-8 rounded-2xl border border-dashed border-line px-6 py-12 text-center">
-          <p className="text-sm text-ink-soft">
-            Aucune matière pour le moment. Créez-en une au moment d&apos;un
-            enregistrement, ou depuis une note déjà enregistrée.
-          </p>
-          <Link
-            href="/dashboard/record"
-            className="mt-4 inline-block text-sm font-semibold text-terracotta-deep hover:underline"
-          >
-            Enregistrer un cours
-          </Link>
-        </div>
+        <p className="mt-8 rounded-2xl border border-dashed border-line px-6 py-10 text-center text-sm text-ink-soft">
+          Aucune matière pour le moment. Ajoute-les une par une, sans rien
+          enregistrer.
+        </p>
       )}
+
+      <QuickAdd mode="subject" />
 
       {unclassified > 0 && (
         <p className="mt-6 text-sm text-ink-soft">
           {countLabel(unclassified, "note")}{" "}
           {unclassified > 1 ? "ne sont" : "n'est"} rattachée
-          {unclassified > 1 ? "s" : ""} à aucun cours.{" "}
+          {unclassified > 1 ? "s" : ""} à aucune matière.{" "}
           <Link
             href="/dashboard/enregistrements"
             className="font-semibold text-terracotta-deep hover:underline"

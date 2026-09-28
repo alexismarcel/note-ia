@@ -26,3 +26,13 @@ export function countLabel(
 ): string {
   return `${count} ${count > 1 ? plural : singular}`;
 }
+
+// "Économie › Chapitre 3", "Économie", or "Non classé" — the one line that
+// says where a note sits, wherever it is listed.
+export function filingLabel(
+  subjectName: string | undefined,
+  courseTitle: string | undefined
+): string {
+  if (!subjectName) return "Non classé";
+  return courseTitle ? `${subjectName} › ${courseTitle}` : subjectName;
+}

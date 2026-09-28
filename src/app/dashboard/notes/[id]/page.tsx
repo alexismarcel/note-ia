@@ -21,7 +21,7 @@ export default async function NotePage({
 
   const { data: note, error } = await supabase
     .from("notes")
-    .select("id, title, content, ai_summary, created_at, course_id")
+    .select("id, title, content, ai_summary, created_at, subject_id, course_id")
     .eq("id", id)
     .single();
 
@@ -41,29 +41,27 @@ export default async function NotePage({
     );
   }
 
-  // Fetched separately rather than as an embedded resource: two plain queries
-  // fail one at a time and say which, where a nested select that stops
-  // resolving reports one opaque error for the whole row.
-  let course: { id: string; title: string; subject: string | null } | null = null;
-  if (note.course_id) {
-    const { data, error: courseError } = await supabase
-      .from("courses")
-      .select("id, title, subjects (name)")
-      .eq("id", note.course_id)
-      .single();
-    if (courseError) {
-      console.error("[note] course lookup failed:", courseError);
-    } else if (data) {
-      const subject = data.subjects as { name: string } | { name: string }[] | null;
-      course = {
-        id: data.id,
-        title: data.title,
-        subject: Array.isArray(subject)
-          ? subject[0]?.name ?? null
-          : subject?.name ?? null,
-      };
-    }
+  // Fetched separately rather than as embedded resources: plain queries fail
+  // one at a time and say which, where a nested select that stops resolving
+  // reports one opaque error for the whole row.
+  const [subjectRes, courseRes] = await Promise.all([
+    note.subject_id
+      ? supabase.from("subjects").select("id, name").eq("id", note.subject_id).single()
+      : Promise.resolve({ data: null, error: null }),
+    note.course_id
+      ? supabase.from("courses").select("id, title").eq("id", note.course_id).single()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+
+  if (subjectRes.error) {
+    console.error("[note] subject lookup failed:", subjectRes.error);
   }
+  if (courseRes.error) {
+    console.error("[note] course lookup failed:", courseRes.error);
+  }
+
+  const subject = subjectRes.data;
+  const course = courseRes.data;
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-5 py-10 sm:px-8">
@@ -80,15 +78,27 @@ export default async function NotePage({
         <time dateTime={note.created_at} className="text-sm text-ink-faint">
           {formatNoteDate(note.created_at)}
         </time>
-        {course && (
-          <p className="mt-2 text-sm">
+        {subject && (
+          <p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm">
             <Link
-              href={`/dashboard/cours/${course.id}`}
+              href={`/dashboard/matieres/${subject.id}`}
               className="text-terracotta-deep hover:underline"
             >
-              {course.subject ? `${course.subject} › ` : ""}
-              {course.title}
+              {subject.name}
             </Link>
+            {course && (
+              <>
+                <span aria-hidden="true" className="text-ink-faint">
+                  ›
+                </span>
+                <Link
+                  href={`/dashboard/cours/${course.id}`}
+                  className="text-terracotta-deep hover:underline"
+                >
+                  {course.title}
+                </Link>
+              </>
+            )}
           </p>
         )}
       </div>
@@ -96,7 +106,10 @@ export default async function NotePage({
       <CoursePicker
         mode="assign"
         noteId={note.id}
-        initialCourseId={note.course_id ?? null}
+        initialFiling={{
+          subjectId: note.subject_id ?? null,
+          courseId: note.course_id ?? null,
+        }}
       />
 
       <NoteAiSheet noteId={note.id} initialSheet={note.ai_summary} />
