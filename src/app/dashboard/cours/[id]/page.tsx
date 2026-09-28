@@ -21,11 +21,25 @@ export default async function CoursePage({
     redirect("/login");
   }
 
-  const { data: course, error: courseError } = await supabase
-    .from("courses")
-    .select("id, title, subject_id, subjects (name)")
-    .eq("id", id)
-    .single();
+  // Both queries key off the id in the URL, not off each other, so they go out
+  // together: waiting for the cours before asking for its séances cost a full
+  // round trip to Supabase for nothing.
+  const [courseRes, notesRes] = await Promise.all([
+    supabase
+      .from("courses")
+      .select("id, title, subject_id, subjects (name)")
+      .eq("id", id)
+      .single(),
+    // Ascending: a cours is read in the order it was taught, unlike the lists
+    // elsewhere which put the newest capture first.
+    supabase
+      .from("notes")
+      .select("id, title, ai_summary, created_at")
+      .eq("course_id", id)
+      .order("created_at", { ascending: true }),
+  ]);
+
+  const { data: course, error: courseError } = courseRes;
 
   if (courseError) {
     if (courseError.code === "PGRST116") {
@@ -49,13 +63,7 @@ export default async function CoursePage({
     ? embedded[0]?.name ?? null
     : embedded?.name ?? null;
 
-  // Ascending: a cours is read in the order it was taught, unlike the lists
-  // elsewhere which put the newest capture first.
-  const { data: notes, error: notesError } = await supabase
-    .from("notes")
-    .select("id, title, ai_summary, created_at")
-    .eq("course_id", course.id)
-    .order("created_at", { ascending: true });
+  const { data: notes, error: notesError } = notesRes;
 
   if (notesError) {
     console.error("[cours] notes query failed:", notesError);

@@ -21,11 +21,22 @@ export default async function SubjectPage({
     redirect("/login");
   }
 
-  const { data: subject, error: subjectError } = await supabase
-    .from("subjects")
-    .select("id, name")
-    .eq("id", id)
-    .single();
+  // All three key off the id in the URL, so they go out together rather than
+  // paying a round trip each in sequence.
+  const [subjectRes, courseRes, noteRes] = await Promise.all([
+    supabase.from("subjects").select("id, name").eq("id", id).single(),
+    supabase
+      .from("courses")
+      .select("id, title, subject_id, created_at")
+      .eq("subject_id", id),
+    supabase
+      .from("notes")
+      .select("id, title, ai_summary, created_at, course_id")
+      .eq("subject_id", id)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  const { data: subject, error: subjectError } = subjectRes;
 
   if (subjectError) {
     // PGRST116: no row — the matière does not exist, or RLS hides someone
@@ -42,18 +53,6 @@ export default async function SubjectPage({
       </main>
     );
   }
-
-  const [courseRes, noteRes] = await Promise.all([
-    supabase
-      .from("courses")
-      .select("id, title, subject_id, created_at")
-      .eq("subject_id", subject.id),
-    supabase
-      .from("notes")
-      .select("id, title, ai_summary, created_at, course_id")
-      .eq("subject_id", subject.id)
-      .order("created_at", { ascending: false }),
-  ]);
 
   if (courseRes.error) {
     console.error("[matiere] courses query failed:", courseRes.error);

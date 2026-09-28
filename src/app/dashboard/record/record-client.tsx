@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { MicVAD } from "@ricky0123/vad-web";
+import { useRouter } from "next/navigation";
+// Type-only: the module itself is ~430 KB of onnxruntime, fetched at the
+// moment recording starts rather than when the page opens.
+import type { MicVAD } from "@ricky0123/vad-web";
 import { createClient } from "@/lib/supabase/client";
 import { floatTo16BitPCM } from "@/lib/deepgram/pcm";
 import { toErrorMessage } from "@/lib/errors";
@@ -38,22 +40,15 @@ const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export default function RecordClient() {
+export default function RecordClient({ prefill }: { prefill: Filing }) {
   const router = useRouter();
   const [status, setStatus] = useState<Status>("idle");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [finalTranscript, setFinalTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
-  // "Enregistrer dans cette matière" / "une séance" arrive as ?matiere=<id> or
-  // ?cours=<id>, so the recording is filed before it starts. Read during render
-  // rather than in an effect: an effect that calls setState only to copy the
-  // URL in causes a second render for nothing.
-  const searchParams = useSearchParams();
-  const [filing, setFiling] = useState<Filing>({
-    subjectId: searchParams.get("matiere"),
-    courseId: searchParams.get("cours"),
-  });
+  // Already resolved from the URL by the server component above.
+  const [filing, setFiling] = useState<Filing>(prefill);
 
   const vadRef = useRef<MicVAD | null>(null);
   const sttRef = useRef<SttConnection | null>(null);
@@ -103,6 +98,7 @@ export default function RecordClient() {
   // Builds mic + socket. Deliberately touches no transcript state, so that
   // recovering after an interruption keeps everything captured so far.
   const openPipeline = useCallback(async () => {
+    const { MicVAD } = await import("@ricky0123/vad-web");
     const vad = await MicVAD.new({
       baseAssetPath: "/vad/",
       onnxWASMBasePath: "/vad/",
