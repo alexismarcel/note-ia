@@ -18,8 +18,16 @@
 -- The stray table is moved aside, never dropped: whatever it holds is still
 -- readable at public.courses_legacy_20260928.
 do $$
+declare
+  kind "char";
 begin
-  if to_regclass('public.courses') is null then
+  select c.relkind into kind
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public'
+    and c.relname = 'courses';
+
+  if kind is null then
     return;
   end if;
 
@@ -39,9 +47,22 @@ begin
       'public.courses has an unexpected shape and courses_legacy_20260928 is taken; rename one of them by hand first.';
   end if;
 
-  alter table public.courses rename to courses_legacy_20260928;
+  -- PostgREST exposes views as freely as tables, so the thing in the way is
+  -- not necessarily a table. Each kind has its own rename.
+  case kind
+    when 'r', 'p', 'f' then
+      alter table public.courses rename to courses_legacy_20260928;
+    when 'v' then
+      alter view public.courses rename to courses_legacy_20260928;
+    when 'm' then
+      alter materialized view public.courses rename to courses_legacy_20260928;
+    else
+      raise exception
+        'public.courses exists as relkind % and cannot be renamed automatically; move it aside by hand.', kind;
+  end case;
+
   raise notice
-    'public.courses had an unexpected shape and was renamed to courses_legacy_20260928; its rows are intact.';
+    'public.courses had an unexpected shape and was renamed to courses_legacy_20260928; its contents are intact.';
 end $$;
 
 -- 1. Courses -------------------------------------------------------------
