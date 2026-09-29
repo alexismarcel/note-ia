@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { isAuthFailure } from "@/lib/supabase/auth-error";
 import { createClient } from "@/lib/supabase/server";
 import { filingLabel } from "@/lib/courses";
-import { formatNoteDate, noteDisplayTitle, titleFromSheet } from "@/lib/notes/title";
+import { formatNoteDate, previewDisplayTitle } from "@/lib/notes/title";
 import DeleteButton from "../delete-button";
 
 // The sheet opens with its own H1; repeating it under the heading would just
@@ -22,12 +22,13 @@ function sheetPreview(sheet: string): string {
 export default async function SheetsPage() {
   const supabase = await createClient();
 
-  // Same as the recordings list: 400 characters of sheet, which still holds
-  // its opening "# Titre" line — that heading is the note's display title.
+  // Same as the recordings list: 400 characters of a markdown sheet, which
+  // still holds its opening "# Titre" line, or a fiche's plan with its title
+  // alongside in summary_title — either way, the note's display title.
   const [notesRes, subjectRes, courseRes] = await Promise.all([
     supabase
       .from("note_previews")
-      .select("id, title, summary_preview, created_at, subject_id, course_id")
+      .select("id, title, summary_preview, summary_title, created_at, subject_id, course_id")
       .eq("has_summary", true)
       .order("created_at", { ascending: false }),
     supabase.from("subjects").select("id, name"),
@@ -87,8 +88,7 @@ export default async function SheetsPage() {
                 className="min-w-0 flex-1"
               >
                 <h2 className="font-display text-lg font-medium text-ink">
-                  {titleFromSheet(note.summary_preview) ??
-                    noteDisplayTitle({ ...note, ai_summary: note.summary_preview })}
+                  {previewDisplayTitle(note)}
                 </h2>
                 <time
                   dateTime={note.created_at}

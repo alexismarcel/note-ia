@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { isAuthFailure } from "@/lib/supabase/auth-error";
 import { createClient } from "@/lib/supabase/server";
 import { formatNoteDate, noteDisplayTitle } from "@/lib/notes/title";
+import { toStoredSheet } from "@/lib/fiche";
 import CoursePicker from "../../course-picker";
 import NoteAiSheet from "./note-ai-sheet";
 
@@ -15,7 +16,9 @@ export default async function NotePage({
 
   const { data: note, error } = await supabase
     .from("notes")
-    .select("id, title, content, ai_summary, created_at, subject_id, course_id")
+    .select(
+      "id, title, content, ai_summary, created_at, subject_id, course_id, duration_seconds"
+    )
     .eq("id", id)
     .single();
 
@@ -60,6 +63,11 @@ export default async function NotePage({
   const subject = subjectRes.data;
   const course = courseRes.data;
 
+  // ai_summary is jsonb: a string for markdown sheets, an object for fiches.
+  const sheet = toStoredSheet(note.ai_summary);
+  const transcript = note.content?.trim() ?? "";
+  const wordCount = transcript ? transcript.split(/\s+/).length : 0;
+
   // Only the sheet ceiling closes generation; the 3 h ceiling deliberately
   // leaves it open, which is the rule the product asked for.
   const { data: usageRows } = await supabase
@@ -83,7 +91,7 @@ export default async function NotePage({
           ← Retour
         </Link>
         <h1 className="mt-3 font-display text-2xl font-medium text-ink">
-          {noteDisplayTitle(note)}
+          {noteDisplayTitle({ ...note, ai_summary: sheet })}
         </h1>
         <time dateTime={note.created_at} className="text-sm text-ink-faint">
           {formatNoteDate(note.created_at)}
@@ -124,8 +132,14 @@ export default async function NotePage({
 
       <NoteAiSheet
         noteId={note.id}
-        initialSheet={note.ai_summary}
+        initialSheet={sheet}
         canGenerate={canGenerate}
+        matiere={subject?.name}
+        // Null on notes recorded before durations were measured: no stat
+        // beats a made-up one.
+        dureeSecondes={note.duration_seconds ?? undefined}
+        nbMotsTranscrits={wordCount || undefined}
+        creeLe={note.created_at}
       />
 
       <div>

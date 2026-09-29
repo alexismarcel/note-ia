@@ -1,3 +1,5 @@
+import type { StoredSheet } from "@/lib/fiche";
+
 export function formatNoteDate(date: string | Date): string {
   return new Date(date).toLocaleDateString("fr-FR", {
     day: "numeric",
@@ -6,10 +8,17 @@ export function formatNoteDate(date: string | Date): string {
   });
 }
 
-// The sheet opens with a markdown H1 the model derives from the lecture.
-// "## Plan du cours" and friends cannot match: a second # is not whitespace.
-export function titleFromSheet(sheet: string | null | undefined): string | null {
+// A markdown sheet (every one generated before the JSON migration) opens with
+// an H1 the model derives from the lecture. "## Plan du cours" and friends
+// cannot match: a second # is not whitespace. A fiche object carries the same
+// title in `titre`; one that says the transcript was too short has none.
+export function titleFromSheet(
+  sheet: StoredSheet | null | undefined
+): string | null {
   if (!sheet) return null;
+  if (typeof sheet !== "string") {
+    return sheet.suffisant === false ? null : sheet.titre.trim() || null;
+  }
   for (const line of sheet.split("\n")) {
     const heading = /^#\s+(.+)$/.exec(line.trim());
     if (heading) return heading[1].trim() || null;
@@ -19,7 +28,7 @@ export function titleFromSheet(sheet: string | null | undefined): string | null 
 
 type TitledNote = {
   title: string;
-  ai_summary: string | null;
+  ai_summary: StoredSheet | null;
   created_at: string;
 };
 
@@ -32,4 +41,23 @@ export function noteDisplayTitle(note: TitledNote): string {
     return `Note du ${formatNoteDate(note.created_at)} — en attente de la fiche`;
   }
   return note.title;
+}
+
+type PreviewedNote = {
+  title: string;
+  created_at: string;
+  // From the note_previews view: the first 400 characters of a markdown
+  // sheet, or a text digest of a fiche object (its plan).
+  summary_preview: string | null;
+  // The fiche's `titre`; null for markdown sheets, which carry it in their H1.
+  summary_title: string | null;
+};
+
+// For the list pages, which read the note_previews view rather than the full
+// sheet.
+export function previewDisplayTitle(note: PreviewedNote): string {
+  return (
+    note.summary_title?.trim() ||
+    noteDisplayTitle({ ...note, ai_summary: note.summary_preview })
+  );
 }
