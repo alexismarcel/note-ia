@@ -6,6 +6,28 @@ import { FICHE_JSON_SCHEMA, parseFiche } from "@/lib/fiche";
 
 export const dynamic = "force-dynamic";
 
+// Set CLAUDE_MODEL to compare models without a code change (e.g.
+// claude-sonnet-5). Read per request, so a new value only needs a redeploy.
+const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
+
+// Haiku 4.5 rejects output_config.effort with a 400; every newer model
+// accepts it. Matched by prefix so the dated ID and its alias both count.
+const REJECTS_EFFORT = ["claude-haiku-4-5"];
+
+// $ per token, for the cost estimate in the log only. Keyed by prefix so a
+// dated ID and its alias share a row; an unlisted model logs no estimate
+// rather than a wrong one.
+const PRICES: Record<
+  string,
+  { input: number; output: number; cacheWrite: number; cacheRead: number }
+> = {
+  "claude-haiku-4-5": { input: 1e-6, output: 5e-6, cacheWrite: 1.25e-6, cacheRead: 1e-7 },
+  "claude-sonnet-5": { input: 2e-6, output: 1e-5, cacheWrite: 2.5e-6, cacheRead: 2e-7 },
+};
+
+const priceFor = (model: string) =>
+  Object.entries(PRICES).find(([prefix]) => model.startsWith(prefix))?.[1];
+
 // Kept free of any per-note content: prompt caching is a prefix match, so
 // interpolating the transcript here would change the prefix on every call and
 // guarantee a cache miss. The transcript goes in the user message instead.
@@ -186,18 +208,22 @@ export async function POST(
   }
 
   const client = new Anthropic({ apiKey });
+  const model = process.env.CLAUDE_MODEL?.trim() || DEFAULT_MODEL;
+  const acceptsEffort = !REJECTS_EFFORT.some((prefix) =>
+    model.startsWith(prefix)
+  );
 
   try {
     const message = await client.messages.create({
-      model: "claude-sonnet-5",
-      // Thinking tokens bill at the output rate and dominated the cost here:
-      // structuring a transcript needs little reasoning, so cap the effort
-      // rather than paying for high-effort thinking on every note.
-      //
+      model,
       // The format constrains decoding to FICHE_JSON_SCHEMA, so the answer
       // always parses: a malformed reply can no longer cost a second call.
       output_config: {
-        effort: "low",
+        // Thinking tokens bill at the output rate and dominated the cost on
+        // Sonnet: structuring a transcript needs little reasoning, so cap the
+        // effort rather than paying for high-effort thinking on every note.
+        // Haiku 4.5 does not think unless asked, and refuses the parameter.
+        ...(acceptsEffort ? { effort: "low" as const } : {}),
         format: { type: "json_schema", schema: FICHE_JSON_SCHEMA },
       },
       // JSON spends tokens on keys and quotes that markdown did not, and a
@@ -205,6 +231,10 @@ export async function POST(
       // ceiling sits well above a long lecture's needs. Unused headroom is not
       // billed; it only guards against a runaway response.
       max_tokens: 16000,
+      // The prompt is identical on every call, so it is cached: a read costs
+      // a tenth of the input price. Each model has a minimum below which the
+      // marker is silently ignored (1 024 tokens on Sonnet 5, 4 096 on Haiku
+      // 4.5); this prompt is about 2 000, so cacheRead stays 0 on Haiku.
       system: [
         {
           type: "text",
@@ -221,17 +251,23 @@ export async function POST(
       cache_creation_input_tokens: cacheWrite,
       cache_read_input_tokens: cacheRead,
     } = message.usage;
-    // cacheRead staying at 0 across calls means the prefix isn't caching —
-    // the failure mode is silent, so it has to be observed here.
-    console.log(
-      `[summary] note=${id} in=${inputTokens} out=${outputTokens} ` +
-        `cacheWrite=${cacheWrite ?? 0} cacheRead=${cacheRead ?? 0} ` +
-        `cost≈$${(
-          inputTokens * 2e-6 +
-          outputTokens * 1e-5 +
-          (cacheWrite ?? 0) * 2.5e-6 +
-          (cacheRead ?? 0) * 2e-7
+    // message.model is the model that actually served the call, so the log
+    // stays right even if CLAUDE_MODEL is mistyped for an alias. cacheRead
+    // staying at 0 across calls means the prefix isn't caching — the failure
+    // mode is silent, so it has to be observed here.
+    const price = priceFor(message.model);
+    const cost = price
+      ? ` cost≈$${(
+          inputTokens * price.input +
+          outputTokens * price.output +
+          (cacheWrite ?? 0) * price.cacheWrite +
+          (cacheRead ?? 0) * price.cacheRead
         ).toFixed(4)}`
+      : "";
+    console.log(
+      `[summary] note=${id} model=${message.model} in=${inputTokens} ` +
+        `out=${outputTokens} cacheWrite=${cacheWrite ?? 0} ` +
+        `cacheRead=${cacheRead ?? 0}${cost}`
     );
 
     if (message.stop_reason === "refusal") {
