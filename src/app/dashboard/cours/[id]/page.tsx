@@ -4,6 +4,8 @@ import { isAuthFailure } from "@/lib/supabase/auth-error";
 import { createClient } from "@/lib/supabase/server";
 import { countLabel } from "@/lib/courses";
 import { formatNoteDate, noteDisplayTitle } from "@/lib/notes/title";
+import { isInsufficient, toStoredSheet } from "@/lib/fiche";
+import SheetContent from "../../sheet-content";
 import GroupDeleteButton from "../group-delete-button";
 import MoveButton from "../move-button";
 import RenameButton from "../rename-button";
@@ -66,8 +68,14 @@ export default async function CoursePage({
     console.error("[cours] notes query failed:", notesError);
   }
 
-  const sessions = notes ?? [];
-  const withSheets = sessions.filter((note) => note.ai_summary);
+  // ai_summary is jsonb: a string for markdown sheets, an object for fiches.
+  const sessions = (notes ?? []).map((note) => ({
+    ...note,
+    sheet: toStoredSheet(note.ai_summary),
+  }));
+  const withSheets = sessions.filter(
+    (note) => note.sheet !== null && !isInsufficient(note.sheet)
+  );
 
   return (
     <main className="mx-auto w-full max-w-3xl px-5 py-10 sm:px-8">
@@ -123,7 +131,7 @@ export default async function CoursePage({
                   Séance {index + 1} · {formatNoteDate(note.created_at)}
                 </span>
                 <h2 className="mt-1 font-display text-lg font-medium text-ink">
-                  {noteDisplayTitle(note)}
+                  {noteDisplayTitle({ ...note, ai_summary: note.sheet })}
                 </h2>
               </Link>
             </li>
@@ -155,12 +163,15 @@ export default async function CoursePage({
                   Séance {sessions.indexOf(note) + 1} ·{" "}
                   {formatNoteDate(note.created_at)}
                 </span>
-                {/* Sheets are stored as markdown but rendered as preformatted
-                    text, exactly as on the note page — one renderer, or none,
-                    rather than two that disagree. */}
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink">
-                  {note.ai_summary}
-                </p>
+                {/* Same renderer as the note page, so a sheet reads the same
+                    wherever it is shown. */}
+                <div className="mt-3">
+                  <SheetContent
+                    sheet={note.sheet!}
+                    matiere={subjectName ?? undefined}
+                    creeLe={note.created_at}
+                  />
+                </div>
               </article>
             ))}
             {withSheets.length < sessions.length && (

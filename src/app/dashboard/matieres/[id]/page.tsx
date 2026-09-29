@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { isAuthFailure } from "@/lib/supabase/auth-error";
 import { createClient } from "@/lib/supabase/server";
 import { byCourseTitle, countLabel } from "@/lib/courses";
-import { formatNoteDate, noteDisplayTitle } from "@/lib/notes/title";
+import { formatNoteDate, previewDisplayTitle } from "@/lib/notes/title";
 import GroupDeleteButton from "../../cours/group-delete-button";
 import RenameButton from "../../cours/rename-button";
 import QuickAdd from "../../cours/quick-add";
@@ -25,7 +25,7 @@ export default async function SubjectPage({
       .eq("subject_id", id),
     supabase
       .from("note_previews")
-      .select("id, title, summary_preview, created_at, course_id")
+      .select("id, title, summary_preview, summary_title, created_at, course_id")
       .eq("subject_id", id)
       .order("created_at", { ascending: false }),
   ]);
@@ -166,7 +166,7 @@ export default async function SubjectPage({
                     {formatNoteDate(note.created_at)}
                   </time>
                   <span className="mt-1 block font-display text-base font-medium text-ink">
-                    {noteDisplayTitle({ ...note, ai_summary: note.summary_preview })}
+                    {previewDisplayTitle(note)}
                   </span>
                 </Link>
               </li>

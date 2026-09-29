@@ -5,20 +5,28 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toErrorMessage } from "@/lib/errors";
 import { titleFromSheet } from "@/lib/notes/title";
+import { isInsufficient, parseFiche, type StoredSheet } from "@/lib/fiche";
 import QuotaLock from "../../quota-lock";
+import SheetContent from "../../sheet-content";
 
 type Props = {
   noteId: string;
-  initialSheet: string | null;
+  initialSheet: StoredSheet | null;
   // False once the ten free sheets are spent. The route refuses too; this only
   // spares the user a click that would fail.
   canGenerate: boolean;
+  // Shown in the fiche's header and stats; all already known, none generated.
+  matiere?: string;
+  dureeSecondes?: number;
+  nbMotsTranscrits?: number;
+  creeLe?: string;
 };
 
 export default function NoteAiSheet({
   noteId,
   initialSheet,
   canGenerate,
+  ...meta
 }: Props) {
   const router = useRouter();
   const [sheet, setSheet] = useState(initialSheet);
@@ -50,7 +58,9 @@ export default function NoteAiSheet({
       if (!res.ok) {
         throw new Error(body.error ?? `Échec de la génération (${res.status})`);
       }
-      setSheet(body.sheet);
+      const fiche = parseFiche(body.sheet);
+      if (!fiche) throw new Error("Réponse inattendue du serveur.");
+      setSheet(fiche);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur inconnue");
     } finally {
@@ -60,13 +70,16 @@ export default function NoteAiSheet({
   };
 
   const save = async () => {
-    if (!sheet) return;
+    // "Transcript too short" is shown, never stored: saved, it would count as
+    // a sheet in every list and name nothing.
+    if (!sheet || isInsufficient(sheet)) return;
     setError(null);
     setIsSaving(true);
     try {
       const supabase = createClient();
-      // The sheet's own H1 becomes the note's name, so the dashboard stops
-      // listing every note by its recording date.
+      // The sheet's title (its H1 for a markdown sheet, `titre` for a fiche)
+      // becomes the note's name, so the dashboard stops listing every note by
+      // its recording date. The column is jsonb: an object is stored as is.
       const generatedTitle = titleFromSheet(sheet);
       const { error: saveError } = await supabase
         .from("notes")
@@ -86,7 +99,9 @@ export default function NoteAiSheet({
     }
   };
 
-  const hasUnsavedChanges = sheet !== null && sheet !== savedSheet;
+  const insufficient = isInsufficient(sheet);
+  const hasUnsavedChanges =
+    sheet !== null && !insufficient && sheet !== savedSheet;
 
   return (
     <section className="flex flex-col gap-4">
@@ -116,7 +131,7 @@ export default function NoteAiSheet({
           </button>
         )}
 
-        {sheet !== null && !hasUnsavedChanges && (
+        {sheet !== null && !insufficient && !hasUnsavedChanges && (
           <span className="text-sm text-ink-faint">Fiche enregistrée.</span>
         )}
       </div>
@@ -125,11 +140,7 @@ export default function NoteAiSheet({
         <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>
       )}
 
-      {sheet && (
-        <article className="whitespace-pre-wrap rounded-2xl border border-line-soft bg-white p-5 text-sm leading-relaxed text-ink">
-          {sheet}
-        </article>
-      )}
+      {sheet && <SheetContent sheet={sheet} {...meta} />}
     </section>
   );
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import type { SheetClaim } from "@/lib/quota";
+import { FICHE_JSON_SCHEMA, parseFiche } from "@/lib/fiche";
 
 export const dynamic = "force-dynamic";
 
@@ -27,44 +28,16 @@ Un bon élève repère activement quand le prof signale explicitement qu'un poin
 - "vous devez absolument savoir ça"
 - répétition volontaire d'un même point à plusieurs reprises dans le cours
 
-Quand tu détectes un de ces signaux, marque l'information correspondante avec 🔴 **[Signalé par le prof]** en début de ligne, et place-la de façon visible dans la fiche (pas noyée dans un paragraphe).
+Quand tu détectes un de ces signaux, donne au bloc correspondant "marque": "prof".
 
-Ne mets JAMAIS ce flag sur une information que tu juges toi-même importante — uniquement sur ce que le prof a explicitement signalé comme tel à l'oral. Ne confonds pas "sujet qui semble central" et "signalé par le prof".
-
-## STRUCTURE DE LA FICHE
-
-Génère la fiche en Markdown avec cette structure :
-
-# [Titre du cours, déduit du contenu]
-
-Ce titre est repris tel quel pour nommer la note dans l'application. Donne un titre court (3 à 8 mots), qui identifie la matière et le sujet précis traité — par exemple « Droit constitutionnel — la séparation des pouvoirs ». N'y mets ni date, ni numéro de séance, ni guillemets, ni ponctuation finale. Si la matière n'est pas identifiable depuis le transcript, ne l'invente pas : nomme seulement le sujet abordé.
-
-## Plan du cours
-[Liste des grandes parties abordées, dans l'ordre où elles ont été traitées]
-
-## Notes détaillées
-[Sections avec titres H2/H3 correspondant aux grandes parties du cours]
-- Définitions : mise en **gras** du terme défini
-- Formules/dates/chiffres : toujours notés avec précision, jamais arrondis ou reformulés si un chiffre exact a été donné
-- Exemples donnés par le prof : gardés, car un bon élève les note comme rappel du raisonnement
-- Utilise 💡 pour un concept clé identifié par toi-même (pas signalé par le prof, mais structurellement central)
-- Utilise 📌 pour une information pratique à retenir (numéro de TD, méthode, etc.)
-
-## Ce qu'il faut retenir en priorité
-[Uniquement les points marqués 🔴 par le prof + les définitions centrales — pas un résumé général du cours]
-
-## Informations pratiques
-[Séparé du contenu académique : dates d'examen, absence de cours, changement de salle, consignes de rendu de devoir, etc. Tout ce qui est annonce logistique et non contenu de cours va ICI, jamais mélangé aux notes.]
-
-## Ce qui n'a pas été dit clairement
-[Uniquement si applicable : signale ici, en une ligne, si le cours s'est arrêté sans conclusion, si un point a été survolé rapidement sans développement, ou si la transcription contient un passage incertain — voir section suivante]
+Ne mets JAMAIS cette marque sur une information que tu juges toi-même importante — uniquement sur ce que le prof a explicitement signalé comme tel à l'oral. Ne confonds pas "sujet qui semble central" et "signalé par le prof".
 
 ## GESTION DE L'INCERTITUDE DE TRANSCRIPTION
 
 Le transcript vient d'une reconnaissance vocale automatique et peut contenir des erreurs (mots mal transcrits, noms propres déformés, termes techniques mal reconnus).
 
 - Si un mot ou un passage te semble suspect (incohérent avec le contexte, terme technique qui ne "sonne pas juste" dans la phrase), ne le corrige PAS silencieusement et ne l'intègre pas comme une certitude.
-- Marque-le ainsi : le terme suivi de (?) — par exemple "la loi de Kepler(?)" si tu n'es pas sûr que ce soit vraiment ce nom qui a été prononcé.
+- Marque-le ainsi, directement dans le texte : le terme suivi de (?) — par exemple "la loi de Kepler(?)" si tu n'es pas sûr que ce soit vraiment ce nom qui a été prononcé.
 - Ne devine jamais un nom propre, une formule ou un chiffre que tu ne peux pas déduire avec confiance du contexte immédiat. Il vaut mieux un (?) visible qu'une fausse certitude.
 
 ## CE QUE TU DOIS IGNORER
@@ -73,11 +46,64 @@ Ne fais PAS apparaître dans la fiche :
 - Les digressions personnelles du prof sans lien avec le cours (anecdotes, blagues, apartés)
 - Les répétitions redondantes d'une même phrase dite deux fois de suite sans info nouvelle
 - Les tics de langage, hésitations, "euh", reformulations orales
-- Les échanges avec des étudiants qui ne apportent pas d'information nouvelle au contenu du cours (sauf si la question ET la réponse contiennent une clarification utile — dans ce cas, l'intégrer sobrement dans les notes)
+- Les échanges avec des étudiants qui n'apportent pas d'information nouvelle au contenu du cours (sauf si la question ET la réponse contiennent une clarification utile — dans ce cas, l'intégrer sobrement dans les notes)
 
 ## FORMAT DE SORTIE
 
-Réponds uniquement avec la fiche en Markdown, sans commentaire avant ou après, sans expliquer ta méthode. Si le transcript fourni est trop court ou insuffisant pour produire une fiche utile, dis-le simplement au lieu de produire une fiche vide ou inventée.
+Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ni après, sans bloc de code, sans expliquer ta méthode.
+
+N'écris AUCUN markdown : pas de #, pas de **gras**, pas de tirets de liste, pas d'emoji. La mise en forme est entièrement gérée par l'application à partir de la structure ci-dessous. Le seul marqueur que tu écris dans le texte est le (?) d'incertitude.
+
+{
+  "suffisant": true,
+  "titre": "string",
+  "plan": ["string", ...],
+  "sections": [
+    {
+      "titre": "string",
+      "niveau": 2,
+      "blocs": [
+        { "texte": "string", "terme": "string?", "marque": "prof|cle|pratique|null" }
+      ]
+    }
+  ],
+  "prioritaire": ["string", ...],
+  "pratique": ["string", ...],
+  "reserves": ["string", ...]
+}
+
+### titre
+Repris tel quel pour nommer la note dans l'application. Court, 3 à 8 mots, identifiant la matière et le sujet précis traité — par exemple « Droit constitutionnel — la séparation des pouvoirs ». Ni date, ni numéro de séance, ni guillemets, ni ponctuation finale. Si la matière n'est pas identifiable depuis le transcript, ne l'invente pas : nomme seulement le sujet abordé.
+
+### plan
+Les grandes parties abordées, dans l'ordre où elles ont été traitées. Une entrée par partie, sans numérotation : elle est ajoutée automatiquement.
+
+### sections — les notes détaillées
+Une section par partie du cours, dans l'ordre. "niveau": 2 pour une grande partie, 3 pour une sous-partie.
+
+Chaque bloc est une note :
+- "texte" : la note elle-même. Les formules, dates et chiffres sont notés avec précision, jamais arrondis ni reformulés si un chiffre exact a été donné. Les exemples donnés par le prof sont gardés : un bon élève les note comme rappel du raisonnement.
+- "terme" : à remplir uniquement quand le bloc définit un terme. Mets le terme défini dans ce champ et sa définition dans "texte". Ne répète pas le terme au début du texte.
+- "marque" : omets ce champ dans la majorité des cas. Sinon :
+  - "prof" — signalé explicitement par le professeur (voir la section détection ci-dessus)
+  - "cle" — concept structurellement central que tu identifies toi-même, sans que le prof l'ait signalé
+  - "pratique" — information pratique surgie au milieu du cours (numéro de TD, méthode, consigne)
+
+### prioritaire
+Uniquement les points marqués "prof" et les définitions centrales. Ce n'est pas un résumé général du cours.
+
+### pratique
+Tout ce qui est annonce logistique et non contenu de cours : dates d'examen, absence de cours, changement de salle, consignes de rendu de devoir. Jamais mélangé aux notes. Omets la clé si le cours n'en contenait aucune.
+
+### reserves
+Une ligne si le cours s'est arrêté sans conclusion, si un point a été survolé sans développement, ou si la transcription contient un passage incertain. Omets la clé s'il n'y a rien à signaler.
+
+### transcript insuffisant
+Si le transcript est trop court ou insuffisant pour produire une fiche utile, réponds uniquement :
+{ "suffisant": false, "message": "string — une phrase expliquant ce qui manque" }
+Ne produis jamais une fiche vide ou inventée.
+
+Omets toute clé facultative plutôt que de la remplir avec une valeur vide.
 
 Le message utilisateur qui suit contient le transcript à traiter.`;
 
@@ -167,10 +193,18 @@ export async function POST(
       // Thinking tokens bill at the output rate and dominated the cost here:
       // structuring a transcript needs little reasoning, so cap the effort
       // rather than paying for high-effort thinking on every note.
-      output_config: { effort: "low" },
-      // A study sheet runs well under this; the ceiling only guards against a
-      // runaway response (unused headroom is not billed).
-      max_tokens: 4000,
+      //
+      // The format constrains decoding to FICHE_JSON_SCHEMA, so the answer
+      // always parses: a malformed reply can no longer cost a second call.
+      output_config: {
+        effort: "low",
+        format: { type: "json_schema", schema: FICHE_JSON_SCHEMA },
+      },
+      // JSON spends tokens on keys and quotes that markdown did not, and a
+      // reply cut short is invalid JSON rather than a shorter sheet, so the
+      // ceiling sits well above a long lecture's needs. Unused headroom is not
+      // billed; it only guards against a runaway response.
+      max_tokens: 16000,
       system: [
         {
           type: "text",
@@ -208,18 +242,45 @@ export async function POST(
       );
     }
 
-    const sheet = message.content
-      .filter((block) => block.type === "text")
-      .map((block) => block.text)
-      .join("\n")
-      .trim();
-
-    if (!sheet) {
+    // Structured output guarantees valid JSON only for a reply that finished:
+    // one stopped by the ceiling is cut mid-object.
+    if (message.stop_reason === "max_tokens") {
+      console.error(`[summary] note=${id} hit max_tokens`);
       await refund();
       return NextResponse.json(
-        { error: "Réponse vide de Claude." },
+        { error: "La fiche générée était trop longue et a été coupée." },
         { status: 502 }
       );
+    }
+
+    const raw = message.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("");
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = null;
+    }
+    // The schema cannot say "titre and sections when suffisant is true" (see
+    // FICHE_JSON_SCHEMA), so the pairing is checked here.
+    const sheet = parseFiche(parsed);
+
+    if (!sheet) {
+      console.error(`[summary] note=${id} unusable reply:`, raw.slice(0, 500));
+      await refund();
+      return NextResponse.json(
+        { error: "Réponse inexploitable de Claude." },
+        { status: 502 }
+      );
+    }
+
+    // "Transcript too short" is an answer, not a sheet: the client shows it
+    // but never saves it, so it must not cost one of the free sheets either.
+    if (sheet.suffisant === false) {
+      await refund();
     }
 
     return NextResponse.json({ sheet });
