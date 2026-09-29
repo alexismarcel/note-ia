@@ -21,7 +21,8 @@ const COPY = {
   },
   sheet: {
     action: "Supprimer la fiche, garder l'enregistrement",
-    confirm: "Supprimer la fiche ?",
+    // One generation per recording: a deleted sheet cannot be made again.
+    confirm: "Supprimer la fiche ? Elle ne pourra pas être régénérée.",
   },
 } as const;
 
