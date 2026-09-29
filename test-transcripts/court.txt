@@ -1,0 +1,9 @@
+Bon, on reprend là où on s'était arrêtés la semaine dernière. Aujourd'hui c'est une séance courte parce que j'ai une réunion à onze heures, donc on va juste voir la notion d'élasticité-prix de la demande.
+
+L'élasticité-prix de la demande, c'est le rapport entre la variation relative de la quantité demandée et la variation relative du prix. Autrement dit, si le prix augmente de un pour cent, de combien de pour cent la quantité demandée baisse. On la note souvent epsilon.
+
+Quand la valeur absolue de l'élasticité est supérieure à un, on dit que la demande est élastique : les consommateurs réagissent fortement au prix. Quand elle est inférieure à un, la demande est inélastique. L'exemple classique, c'est le carburant : même si le prix monte, les gens continuent d'en acheter parce qu'ils en ont besoin pour aller travailler. À l'inverse, pour un bien de luxe ou un bien qui a beaucoup de substituts, comme une marque de soda, la demande est plutôt élastique.
+
+Un point sur le calcul. On prend la variation de la quantité divisée par la quantité initiale, et on divise le tout par la variation du prix sur le prix initial. Par exemple, le prix passe de dix à onze euros, soit plus dix pour cent, et la quantité passe de cent à quatre-vingt-cinq unités, soit moins quinze pour cent. L'élasticité vaut donc moins un virgule cinq : la demande est élastique.
+
+Voilà, on s'arrête là pour aujourd'hui. La semaine prochaine on verra l'élasticité croisée. Et pour le TD de jeudi, faites les exercices trois et quatre de la feuille deux.
