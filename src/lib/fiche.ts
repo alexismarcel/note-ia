@@ -42,6 +42,7 @@ const blocSchema = {
     texte: { type: "string" },
     terme: { type: "string" },
     marque: { type: "string", enum: [...MARQUES] },
+    signal: { type: "string" },
   } satisfies Record<keyof Bloc, JsonSchema>,
   required: ["texte"] satisfies RequiredKeys<Bloc>[],
   additionalProperties: false,
@@ -93,6 +94,7 @@ function optionalStrings(v: unknown): string[] | undefined | false {
 function parseBloc(v: unknown): Bloc | null {
   if (!isRecord(v) || !isString(v.texte)) return null;
   if (v.terme !== undefined && !isString(v.terme)) return null;
+  if (v.signal !== undefined && !isString(v.signal)) return null;
   if (
     v.marque !== undefined &&
     v.marque !== null &&
@@ -104,6 +106,11 @@ function parseBloc(v: unknown): Bloc | null {
     texte: v.texte,
     ...(isString(v.terme) && v.terme.trim() ? { terme: v.terme } : {}),
     ...(v.marque ? { marque: v.marque as Marque } : {}),
+    // The teacher's quote only means something on a "prof" mark, which it
+    // justifies; anywhere else it is dropped rather than stored.
+    ...(v.marque === "prof" && isString(v.signal) && v.signal.trim()
+      ? { signal: v.signal }
+      : {}),
   };
 }
 

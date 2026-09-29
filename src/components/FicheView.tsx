@@ -14,6 +14,8 @@ export type Bloc = {
   texte: string;
   terme?: string;
   marque?: Marque | null;
+  /** citation littérale du prof, vérifiée contre le transcript avant stockage */
+  signal?: string;
 };
 
 export type Section = {
@@ -246,6 +248,9 @@ export default function FicheView({
                       {b.marque === 'prof' && (
                         <span className="fic-badge">Signalé en cours</span>
                       )}
+                      {b.marque === 'prof' && b.signal && (
+                        <p className="fic-citation">« {b.signal} »</p>
+                      )}
                       <p>
                         {b.terme && <b className="fic-terme">{b.terme}</b>}
                         {b.terme && <span className="fic-tiret"> — </span>}
@@ -372,6 +377,7 @@ const CSS = `
 .fic-m-prof{background:var(--f-alerte-bg);border-left:3px solid var(--f-alerte);border-radius:0 12px 12px 0;padding:13px 16px}
 .fic-m-prof .fic-puce{display:none}
 .fic-badge{align-self:flex-start;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--f-alerte)}
+.fic-citation{font-size:13px;line-height:1.5;font-style:italic;color:var(--f-alerte);opacity:.78;margin:-2px 0 2px}
 
 .fic-terme{font-weight:600;color:var(--f-ink)}
 .fic-tiret{color:var(--f-faint)}

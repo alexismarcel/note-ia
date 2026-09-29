@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import type { SheetClaim } from "@/lib/quota";
 import { FICHE_JSON_SCHEMA, parseFiche } from "@/lib/fiche";
+import { verifierSignaux } from "@/lib/verifierSignaux";
 
 export const dynamic = "force-dynamic";
 
@@ -43,16 +44,31 @@ Tu ne dois JAMAIS ajouter d'information qui n'est pas explicitement présente da
 
 ## DÉTECTION DES SIGNAUX D'IMPORTANCE DU PROFESSEUR
 
-Un bon élève repère activement quand le prof signale explicitement qu'un point est important. Repère ces formulations (et leurs variantes) dans le transcript :
+Un signal, c'est un moment où le professeur ARRÊTE d'enseigner pour parler de l'importance de ce qu'il vient de dire. Repère ces formulations (et leurs variantes) dans le transcript :
 - "notez ça", "retenez bien", "c'est important"
 - "ça tombe à l'examen", "ça peut tomber au partiel", "je vous le redis"
 - "mettez ça en rouge / en gras / soulignez"
 - "vous devez absolument savoir ça"
 - répétition volontaire d'un même point à plusieurs reprises dans le cours
 
-Quand tu détectes un de ces signaux, donne au bloc correspondant "marque": "prof".
+### Ce qui n'est PAS un signal
 
-Ne mets JAMAIS cette marque sur une information que tu juges toi-même importante — uniquement sur ce que le prof a explicitement signalé comme tel à l'oral. Ne confonds pas "sujet qui semble central" et "signalé par le prof".
+Ne confonds jamais le contenu avec le signalement du contenu. Ne sont PAS des signaux :
+- un conseil, une astuce, une technique, une recommandation, une méthode — même formulée à l'impératif ("rafraîchissez souvent", "utilisez des boosts")
+- une définition, une règle, une formule, un chiffre
+- une information que tu juges toi-même centrale ou utile
+- le fait qu'un passage soit la conclusion d'une partie
+- le ton insistant ou pédagogique du professeur
+
+Qu'un contenu soit pratique, actionnable ou manifestement utile ne le rend pas signalé. Seules les paroles du professeur SUR l'importance comptent.
+
+### La règle de la citation
+
+Quand tu poses "marque": "prof", tu DOIS remplir le champ "signal" avec les mots exacts du professeur qui constituent le signalement, copiés mot pour mot depuis le transcript. Pas une reformulation, pas un résumé : la citation littérale, telle qu'elle apparaît dans le texte fourni.
+
+Si tu ne peux pas citer ces mots exacts parce qu'ils n'existent pas dans le transcript, alors il n'y a pas eu de signalement : omets "marque" entièrement.
+
+Dans le doute, n'en mets pas. Un signalement manquant est une petite perte ; un signalement inventé rend toute la fiche suspecte.
 
 ## GESTION DE L'INCERTITUDE DE TRANSCRIPTION
 
@@ -85,7 +101,7 @@ N'écris AUCUN markdown : pas de #, pas de **gras**, pas de tirets de liste, pas
       "titre": "string",
       "niveau": 2,
       "blocs": [
-        { "texte": "string", "terme": "string?", "marque": "prof|cle|pratique|null" }
+        { "texte": "string", "terme": "string?", "marque": "prof|cle|pratique|null", "signal": "string?" }
       ]
     }
   ],
@@ -107,9 +123,10 @@ Chaque bloc est une note :
 - "texte" : la note elle-même. Les formules, dates et chiffres sont notés avec précision, jamais arrondis ni reformulés si un chiffre exact a été donné. Les exemples donnés par le prof sont gardés : un bon élève les note comme rappel du raisonnement.
 - "terme" : à remplir uniquement quand le bloc définit un terme. Mets le terme défini dans ce champ et sa définition dans "texte". Ne répète pas le terme au début du texte.
 - "marque" : omets ce champ dans la majorité des cas. Sinon :
-  - "prof" — signalé explicitement par le professeur (voir la section détection ci-dessus)
+  - "prof" — signalé explicitement par le professeur (voir la section détection ci-dessus). Exige obligatoirement le champ "signal".
   - "cle" — concept structurellement central que tu identifies toi-même, sans que le prof l'ait signalé
   - "pratique" — information pratique surgie au milieu du cours (numéro de TD, méthode, consigne)
+- "signal" : uniquement avec "marque": "prof". La citation littérale des mots du professeur qui signalent l'importance, copiés tels quels depuis le transcript. Une phrase courte suffit. Sans citation possible, pas de marque.
 
 ### prioritaire
 Uniquement les points marqués "prof" et les définitions centrales. Ce n'est pas un résumé général du cours.
@@ -302,9 +319,9 @@ export async function POST(
     }
     // The schema cannot say "titre and sections when suffisant is true" (see
     // FICHE_JSON_SCHEMA), so the pairing is checked here.
-    const sheet = parseFiche(parsed);
+    const parsedSheet = parseFiche(parsed);
 
-    if (!sheet) {
+    if (!parsedSheet) {
       console.error(`[summary] note=${id} unusable reply:`, raw.slice(0, 500));
       await refund();
       return NextResponse.json(
@@ -315,9 +332,18 @@ export async function POST(
 
     // "Transcript too short" is an answer, not a sheet: the client shows it
     // but never saves it, so it must not cost one of the free sheets either.
-    if (sheet.suffisant === false) {
+    if (parsedSheet.suffisant === false) {
       await refund();
+      return NextResponse.json({ sheet: parsedSheet });
     }
+
+    // Every "signalé par le prof" must quote the teacher's words; one whose
+    // quote is not in the transcript loses the mark (the note itself stays).
+    // Done here, before the sheet leaves the server: what the client saves is
+    // what it receives, so it is always the verified sheet.
+    const { fiche: sheet, rapport } = verifierSignaux(parsedSheet, transcript);
+    // proposes vs retires, per model, is what decides Haiku against Sonnet.
+    console.log("[signaux]", { model: message.model, ...rapport });
 
     return NextResponse.json({ sheet });
   } catch (err) {
