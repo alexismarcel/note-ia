@@ -1,0 +1,17 @@
+Bonjour à tous. Aujourd'hui on attaque le chapitre sur la séparation des pouvoirs, qui est un chapitre central du droit constitutionnel.
+
+On part de Montesquieu. En 1748, il publie De l'esprit des lois. L'idée fondamentale, c'est que pour éviter l'abus de pouvoir, il faut que le pouvoir arrête le pouvoir. Notez bien ça : "le pouvoir arrête le pouvoir", c'est la formule qu'on attend de vous. Il distingue trois fonctions : la fonction législative, qui fait la loi, la fonction exécutive, qui l'applique, et la fonction juridictionnelle, qui tranche les litiges.
+
+Attention, Montesquieu ne parle pas d'une séparation étanche. Il parle plutôt d'une distribution des fonctions entre des organes différents, avec des moyens de s'empêcher mutuellement. C'est une nuance que beaucoup d'étudiants ratent, et ça peut tomber à l'examen, donc soyez précis là-dessus.
+
+Deuxième partie : les deux grands modèles. D'un côté la séparation rigide, qu'on associe au régime présidentiel, dont l'exemple type est les États-Unis avec la Constitution de 1787. Le président ne peut pas dissoudre le Congrès, et le Congrès ne peut pas renverser le président par un vote de défiance. Chaque organe est indépendant dans sa sphère. De l'autre côté, la séparation souple, qui caractérise le régime parlementaire, par exemple le Royaume-Uni. Là, il y a des moyens d'action réciproques : le gouvernement est responsable devant le Parlement, qui peut le renverser, et en contrepartie l'exécutif peut dissoudre la chambre basse.
+
+Je vous le redis parce que c'est vraiment la clé du chapitre : régime présidentiel égale séparation rigide, régime parlementaire égale séparation souple, et le critère, c'est l'existence ou non de moyens d'action réciproques.
+
+Troisième partie, la Cinquième République. Elle est souvent qualifiée de régime parlementaire rationalisé, parce qu'on a le mécanisme de responsabilité du gouvernement devant l'Assemblée nationale, avec la motion de censure de l'article quarante-neuf, et le droit de dissolution de l'article douze. Mais le président a un poids qui dépasse largement ce qu'on voit dans un régime parlementaire classique, surtout depuis l'élection au suffrage universel direct en 1962.
+
+Mettez ça en gras dans vos notes : l'article quarante-neuf alinéa trois permet au gouvernement d'engager sa responsabilité sur un texte, qui est alors adopté sans vote sauf si une motion de censure est votée.
+
+Pour finir, un mot sur l'autorité judiciaire. En France, la Constitution parle d'autorité judiciaire et non de pouvoir judiciaire, à l'article soixante-quatre. Le président de la République en est le garant, assisté du Conseil supérieur de la magistrature.
+
+La prochaine fois on verra le contrôle de constitutionnalité. Pensez à lire le chapitre quatre du manuel avant.
