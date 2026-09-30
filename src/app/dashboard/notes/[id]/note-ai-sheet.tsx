@@ -60,8 +60,10 @@ export default function NoteAiSheet({
           "Tes 10 fiches gratuites sont utilisées. L'abonnement les débloque."
         );
       }
-      if (res.status === 409) {
-        // Generated in another tab since this page loaded.
+      if (res.status === 409 && body.state === "done") {
+        // Generated in another tab since this page loaded. An "in_progress"
+        // answer leaves the button: that lock expires, and the message says
+        // to try again in a few minutes.
         setGenerated(true);
         router.refresh();
       }

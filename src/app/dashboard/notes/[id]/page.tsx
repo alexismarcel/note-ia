@@ -69,7 +69,7 @@ export default async function NotePage({
   // instead of the note looking like it still awaits its sheet.
   const { data: generation, error: generationError } = await supabase
     .from("note_sheet_generations")
-    .select("insufficient_message")
+    .select("insufficient_message, completed_at")
     .eq("note_id", note.id)
     .maybeSingle();
   if (generationError) {
@@ -149,7 +149,9 @@ export default async function NotePage({
         noteId={note.id}
         initialSheet={sheet}
         canGenerate={canGenerate}
-        alreadyGenerated={generation != null}
+        // Only a completed generation closes the note for good; one still in
+        // progress expires on its own, and the route answers a click on it.
+        alreadyGenerated={generation?.completed_at != null}
         matiere={subject?.name}
         // Null on notes recorded before durations were measured: no stat
         // beats a made-up one.
