@@ -10,6 +10,12 @@ import { nettoyerTranscript } from "@/lib/stt/nettoyerTranscript";
 
 export const dynamic = "force-dynamic";
 
+// Shown for every failure the user can do nothing about but wait — a missing
+// key, a database hiccup, the API rejecting our credentials. The cause goes
+// to the logs; the user gets something they can act on.
+const START_FAILED =
+  "La génération n'a pas pu démarrer. Réessaie dans quelques minutes.";
+
 // $ per token, for the cost estimate in the log only. Keyed by prefix so a
 // dated ID and its alias share a row; an unlisted model logs no estimate
 // rather than a wrong one.
@@ -70,94 +76,126 @@ export async function POST(
 
   // One sheet per recording: each generation is a paid call, and nothing else
   // stops subscribers and unlimited accounts from generating again and again.
-  // The primary key makes the insert the lock, so two clicks cannot both get
-  // through. Written as the service role because users may only read this
-  // table (see 20261007100000_one_sheet_per_note.sql).
-  const admin = createAdminClient();
-  const { error: lockError } = await admin
-    .from("note_sheet_generations")
-    .insert({ note_id: id, user_id: user.id });
-  if (lockError) {
-    if (lockError.code === "23505") {
-      return NextResponse.json(
-        {
-          error:
-            "La fiche de cet enregistrement a déjà été générée : une seule fiche est possible par enregistrement.",
-        },
-        { status: 409 }
-      );
-    }
-    console.error("[summary] lock failed:", lockError);
-    return NextResponse.json({ error: "lock_failed" }, { status: 500 });
+  // acquire_sheet_generation() takes the note's lock atomically, as the
+  // service role because users may only read that table
+  // (20261009100000_expiring_sheet_lock.sql). A lock stays "in progress"
+  // until this request marks it complete; one left in progress by a request
+  // that died without reaching its finally block (crash, platform timeout)
+  // expires after 10 minutes, so it can never block a note for good.
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch (err) {
+    console.error("[summary] admin client unavailable:", err);
+    return NextResponse.json({ error: START_FAILED }, { status: 503 });
   }
-  // Given back only when no answer came out of the call — a failure on our
-  // side or the API's — so the user can try again. Never by the user.
-  const releaseLock = async () => {
-    const { error } = await admin
-      .from("note_sheet_generations")
-      .delete()
-      .eq("note_id", id);
-    if (error) console.error("[summary] lock release failed:", error);
-  };
 
-  // Claimed before the model is called, so two clicks cannot both slip
-  // through; given back below if the call produces nothing.
-  const { data: claimRows, error: claimError } = await supabase.rpc(
-    "claim_sheet_generation"
+  const { data: lockState, error: lockError } = await admin.rpc(
+    "acquire_sheet_generation",
+    { p_note_id: id, p_user_id: user.id }
   );
-  if (claimError) {
-    console.error("[summary] claim_sheet_generation failed:", claimError);
-    await releaseLock();
-    return NextResponse.json({ error: "quota_check_failed" }, { status: 500 });
+  if (lockError) {
+    // Not a held lock — that is "in_progress" below — but the lock could not
+    // be read or written at all: a missing or wrong SUPABASE_SECRET_KEY, or
+    // the migration not applied. The details are for the logs.
+    console.error("[summary] lock failed:", lockError);
+    return NextResponse.json({ error: START_FAILED }, { status: 503 });
   }
-  const claim = (Array.isArray(claimRows) ? claimRows[0] : claimRows) as
-    | SheetClaim
-    | undefined;
-  if (!claim?.allowed) {
-    await releaseLock();
+  if (lockState === "done") {
     return NextResponse.json(
-      { error: "quota_exceeded", reason: claim?.reason ?? "no_profile" },
-      { status: 402 }
+      {
+        error:
+          "La fiche de cet enregistrement a déjà été générée : une seule fiche est possible par enregistrement.",
+        state: "done",
+      },
+      { status: 409 }
     );
   }
-  const claimedFree = claim.reason === "free";
-
-  // Every path out of here that is not a generated sheet must give the claim
-  // back, or a failed request would cost one of ten. As the service role, for
-  // the user authenticated above: users cannot call the refund themselves, or
-  // they could reset their own counter (20261008100000_server_only_refund.sql).
-  const refund = async () => {
-    if (!claimedFree) return;
-    const { error } = await admin.rpc("refund_sheet_generation", {
-      uid: user.id,
-    });
-    if (error) console.error("[summary] refund failed:", error);
-  };
-  // A call that produced no answer: the quota and the note's one generation
-  // both come back.
-  const abandon = async () => {
-    await refund();
-    await releaseLock();
-  };
-
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    await abandon();
+  if (lockState !== "acquired") {
     return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY is not configured" },
-      { status: 500 }
+      {
+        error:
+          "Une génération est déjà en cours pour cet enregistrement, réessaie dans quelques minutes.",
+        state: "in_progress",
+      },
+      { status: 409 }
     );
   }
 
-  const client = new Anthropic({ apiKey });
-  const model = process.env.CLAUDE_MODEL?.trim() || DEFAULT_MODEL;
+  // Set once the note's one generation has been used up — a sheet, or a
+  // "transcript too short" answer. Anything else, including a throw, leaves
+  // it null and the finally block gives the lock back.
+  let completed = false;
+  // True between a successful quota claim and either a sheet (kept) or the
+  // finally block (refunded).
+  let claimedFree = false;
 
   try {
-    // Built in one place so scripts/test-haiku-vs-sonnet.ts sends exactly
-    // the request the app sends.
-    const message = await client.messages.create(
-      ficheRequest(model, transcript)
+    // Claimed before the model is called, so two clicks cannot both slip
+    // through; given back in the finally block if the call produces nothing.
+    const { data: claimRows, error: claimError } = await supabase.rpc(
+      "claim_sheet_generation"
     );
+    if (claimError) {
+      console.error("[summary] claim_sheet_generation failed:", claimError);
+      return NextResponse.json({ error: START_FAILED }, { status: 503 });
+    }
+    const claim = (Array.isArray(claimRows) ? claimRows[0] : claimRows) as
+      | SheetClaim
+      | undefined;
+    if (!claim?.allowed) {
+      return NextResponse.json(
+        { error: "quota_exceeded", reason: claim?.reason ?? "no_profile" },
+        { status: 402 }
+      );
+    }
+    claimedFree = claim.reason === "free";
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      console.error("[summary] ANTHROPIC_API_KEY is not configured");
+      return NextResponse.json({ error: START_FAILED }, { status: 503 });
+    }
+
+    // Bounded well under the lock's 10-minute expiry: with the SDK's default
+    // (10 minutes per attempt, 2 retries) a slow call could outlive its lock
+    // and let a second request start a paid generation in parallel. 4 minutes
+    // and one retry is 8 at worst.
+    const client = new Anthropic({ apiKey, timeout: 4 * 60_000, maxRetries: 1 });
+    const model = process.env.CLAUDE_MODEL?.trim() || DEFAULT_MODEL;
+
+    let message: Anthropic.Message;
+    try {
+      // Built in one place so scripts/test-haiku-vs-sonnet.ts sends exactly
+      // the request the app sends.
+      message = await client.messages.create(ficheRequest(model, transcript));
+    } catch (err) {
+      if (err instanceof Anthropic.AuthenticationError) {
+        console.error("[summary] Anthropic authentication failed:", err.message);
+        return NextResponse.json({ error: START_FAILED }, { status: 503 });
+      }
+      if (err instanceof Anthropic.RateLimitError) {
+        return NextResponse.json(
+          { error: "Limite de requêtes atteinte, réessaie dans un instant." },
+          { status: 429 }
+        );
+      }
+      if (err instanceof Anthropic.APIConnectionTimeoutError) {
+        console.error(`[summary] note=${id} Claude call timed out`);
+        return NextResponse.json(
+          { error: "La génération a pris trop de temps, réessaie dans quelques minutes." },
+          { status: 504 }
+        );
+      }
+      if (err instanceof Anthropic.APIError) {
+        console.error(`[summary] Claude API error ${err.status}:`, err.message);
+        return NextResponse.json(
+          { error: "Le service de génération est indisponible, réessaie dans quelques minutes." },
+          { status: 502 }
+        );
+      }
+      throw err;
+    }
 
     const {
       input_tokens: inputTokens,
@@ -185,7 +223,6 @@ export async function POST(
     );
 
     if (message.stop_reason === "refusal") {
-      await abandon();
       return NextResponse.json(
         { error: "Claude a refusé de traiter cette transcription." },
         { status: 422 }
@@ -196,7 +233,6 @@ export async function POST(
     // one stopped by the ceiling is cut mid-object.
     if (message.stop_reason === "max_tokens") {
       console.error(`[summary] note=${id} hit max_tokens`);
-      await abandon();
       return NextResponse.json(
         { error: "La fiche générée était trop longue et a été coupée." },
         { status: 502 }
@@ -220,7 +256,6 @@ export async function POST(
 
     if (!parsedSheet) {
       console.error(`[summary] note=${id} unusable reply:`, raw.slice(0, 500));
-      await abandon();
       return NextResponse.json(
         { error: "Réponse inexploitable de Claude." },
         { status: 502 }
@@ -228,17 +263,13 @@ export async function POST(
     }
 
     // "Transcript too short" is an answer, not a sheet: it never becomes the
-    // note's sheet, so it gives the free-sheet claim back. It does keep the
-    // note's one generation — the transcript will not change, so a retry
-    // would only pay for the same answer — and its message is stored so the
-    // note page can keep showing it.
+    // note's sheet, so the free-sheet claim goes back (in the finally block,
+    // claimedFree still being set). It does use up the note's one generation
+    // — the transcript will not change, so a retry would only pay for the
+    // same answer — and its message is stored so the note page keeps it.
     if (parsedSheet.suffisant === false) {
-      await refund();
-      const { error: noteError } = await admin
-        .from("note_sheet_generations")
-        .update({ insufficient_message: parsedSheet.message })
-        .eq("note_id", id);
-      if (noteError) console.error("[summary] insufficient save failed:", noteError);
+      await completeLock(admin, id, parsedSheet.message);
+      completed = true;
       return NextResponse.json({ sheet: parsedSheet, saved: false });
     }
 
@@ -262,31 +293,46 @@ export async function POST(
       console.error("[summary] save failed:", saveError);
     }
 
+    // The sheet exists and is paid for: the quota stays spent and the lock
+    // becomes permanent.
+    claimedFree = false;
+    await completeLock(admin, id, null);
+    completed = true;
     return NextResponse.json({ sheet, saved: !saveError });
-  } catch (err) {
-    if (err instanceof Anthropic.AuthenticationError) {
-      await abandon();
-      return NextResponse.json(
-        { error: "Clé API Anthropic invalide." },
-        { status: 502 }
-      );
+  } finally {
+    // Every way out that did not use up the generation — an early return, an
+    // API error, a throw — lands here: the quota and the lock come back, so
+    // the user can try again. Each step logs its own failure rather than
+    // throwing over the response already chosen above.
+    if (claimedFree) {
+      const { error } = await admin.rpc("refund_sheet_generation", {
+        uid: user.id,
+      });
+      if (error) console.error("[summary] refund failed:", error);
     }
-    if (err instanceof Anthropic.RateLimitError) {
-      await abandon();
-      return NextResponse.json(
-        { error: "Limite de requêtes atteinte, réessaie dans un instant." },
-        { status: 429 }
-      );
+    if (!completed) {
+      const { error } = await admin
+        .from("note_sheet_generations")
+        .delete()
+        .eq("note_id", id)
+        .is("completed_at", null);
+      if (error) console.error("[summary] lock release failed:", error);
     }
-    if (err instanceof Anthropic.APIError) {
-      await abandon();
-      return NextResponse.json(
-        { error: `Erreur API Claude (${err.status}) : ${err.message}` },
-        { status: 502 }
-      );
-    }
-    // An unexpected throw is still a request that produced no sheet.
-    await abandon();
-    throw err;
   }
+}
+
+// Marks the note's one generation as used: the lock stops expiring.
+async function completeLock(
+  admin: ReturnType<typeof createAdminClient>,
+  noteId: string,
+  insufficientMessage: string | null
+) {
+  const { error } = await admin
+    .from("note_sheet_generations")
+    .update({
+      completed_at: new Date().toISOString(),
+      insufficient_message: insufficientMessage,
+    })
+    .eq("note_id", noteId);
+  if (error) console.error("[summary] lock completion failed:", error);
 }
