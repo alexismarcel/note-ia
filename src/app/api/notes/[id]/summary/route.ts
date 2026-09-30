@@ -123,10 +123,14 @@ export async function POST(
   const claimedFree = claim.reason === "free";
 
   // Every path out of here that is not a generated sheet must give the claim
-  // back, or a failed request would cost one of ten.
+  // back, or a failed request would cost one of ten. As the service role, for
+  // the user authenticated above: users cannot call the refund themselves, or
+  // they could reset their own counter (20261008100000_server_only_refund.sql).
   const refund = async () => {
     if (!claimedFree) return;
-    const { error } = await supabase.rpc("refund_sheet_generation");
+    const { error } = await admin.rpc("refund_sheet_generation", {
+      uid: user.id,
+    });
     if (error) console.error("[summary] refund failed:", error);
   };
   // A call that produced no answer: the quota and the note's one generation
