@@ -4,6 +4,8 @@
 // not be exercised before shipping — hence the runtime switch below rather
 // than a replacement.
 
+import { nettoyerTranscript } from "./nettoyerTranscript";
+
 export type SttProvider = "deepgram" | "soniox";
 
 export type SttCallbacks = {
@@ -236,8 +238,10 @@ async function connectSoniox(cb: SttCallbacks): Promise<SttConnection> {
         if (t.is_final) finals += t.text ?? "";
         else interim += t.text ?? "";
       }
-      if (finals) cb.onFinalDelta(finals);
-      cb.onInterim(interim);
+      // Cleaned here, where the text first arrives: "<fin>"/"<end>" markers
+      // never reach the transcript state, the database or the prompt.
+      if (finals) cb.onFinalDelta(nettoyerTranscript(finals));
+      cb.onInterim(nettoyerTranscript(interim));
     },
     (event) => {
       if (!intentionalClose) cb.onDropped?.(event);

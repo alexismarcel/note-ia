@@ -15,6 +15,7 @@ import {
   resolveProvider,
   type SttConnection,
 } from "@/lib/stt/connect";
+import { nettoyerTranscript } from "@/lib/stt/nettoyerTranscript";
 
 type Status =
   | "idle"
@@ -313,7 +314,10 @@ export default function RecordClient({ prefill }: { prefill: Filing }) {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const content = finalTranscript.trim();
+      // Chunks are cleaned as they arrive (see connect.ts), but a marker at
+      // the end of one chunk and a space at the start of the next only meet
+      // here: the whole text goes through the same pass once more.
+      const content = nettoyerTranscript(finalTranscript).trim();
       const { error } = await supabase.from("notes").insert({
         user_id: user.id,
         // A slice of the transcript made for a title that read as noise. The

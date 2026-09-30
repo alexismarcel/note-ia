@@ -6,6 +6,7 @@ import type { SheetClaim } from "@/lib/quota";
 import { parseFiche } from "@/lib/fiche";
 import { DEFAULT_MODEL, ficheRequest } from "@/lib/fiche-generation";
 import { verifierSignaux } from "@/lib/verifierSignaux";
+import { nettoyerTranscript } from "@/lib/stt/nettoyerTranscript";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +57,10 @@ export async function POST(
     );
   }
 
-  const transcript = note.content?.trim();
+  // Notes recorded before nettoyerTranscript existed still carry Soniox's
+  // "<fin>"/"<end>" markers in the database; they are stripped here so the
+  // prompt never contains them, whatever the note's age.
+  const transcript = nettoyerTranscript(note.content ?? "").trim();
   if (!transcript) {
     return NextResponse.json(
       { error: "Cette note n'a pas de transcription à résumer." },
