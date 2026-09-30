@@ -26,7 +26,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { loadEnvConfig } from "@next/env";
-import { parseFiche } from "../src/lib/fiche";
+import { parseFiche, type StoredSheet } from "../src/lib/fiche";
 import { ficheRequest } from "../src/lib/fiche-generation";
 import { verifierSignaux, type RapportSignaux } from "../src/lib/verifierSignaux";
 
@@ -186,7 +186,7 @@ async function unRun(
   nom: string,
   transcript: string,
   run: number
-): Promise<{ ligne: Ligne; plan: string[] }> {
+): Promise<{ ligne: Ligne; plan: string[]; fiche: StoredSheet | null }> {
   const ligne: Ligne = {
     modele,
     transcript: nom,
@@ -205,6 +205,9 @@ async function unRun(
     duree_ms: 0,
   };
   let plan: string[] = [];
+  // La fiche telle que l'app l'enregistrerait (après verifierSignaux), ou
+  // la réponse « insuffisant » ; null si aucune fiche exploitable.
+  const fiche: StoredSheet | null = null;
 
   const t0 = performance.now();
   let message: Anthropic.Message;
@@ -216,7 +219,7 @@ async function unRun(
       err instanceof Anthropic.APIError
         ? `API ${err.status} : ${err.message}`
         : String(err);
-    return { ligne, plan };
+    return { ligne, plan, fiche };
   }
   ligne.duree_ms = Math.round(performance.now() - t0);
   ligne.stop_reason = message.stop_reason;
@@ -239,16 +242,16 @@ async function unRun(
   } catch {
     ligne.erreur = "JSON.parse a échoué";
   }
-  const fiche = parseFiche(parsed);
-  if (!fiche) {
+  const lue = parseFiche(parsed);
+  if (!lue) {
     ligne.erreur ??= "réponse non conforme au schéma";
-    return { ligne, plan };
+    return { ligne, plan, fiche };
   }
   ligne.json_valide = true;
-  ligne.suffisant = fiche.suffisant !== false;
-  if (fiche.suffisant === false) return { ligne, plan };
+  ligne.suffisant = lue.suffisant !== false;
+  if (lue.suffisant === false) return { ligne, plan, fiche: lue };
 
-  const { fiche: verifiee, rapport } = verifierSignaux(fiche, transcript);
+  const { fiche: verifiee, rapport } = verifierSignaux(lue, transcript);
   ligne.rapport_signaux = rapport;
   ligne.nb_sections = verifiee.sections.length;
   // Après vérification : ce que l'app enregistrerait réellement.
@@ -256,7 +259,7 @@ async function unRun(
     .flatMap((s) => s.blocs)
     .filter((b) => b.marque === "prof").length;
   plan = verifiee.plan ?? [];
-  return { ligne, plan };
+  return { ligne, plan, fiche: verifiee };
 }
 
 /* ---------- résumé ---------- */
@@ -325,6 +328,7 @@ async function main() {
   const client = new Anthropic();
   const lignes: Ligne[] = [];
   const plans = new Map<string, string[][]>();
+  const fichesDeuxHeures: { modele: string; run: number; fiche: StoredSheet | null }[] = [];
   const total = textes.length * MODELES.length * RUNS_PAR_MODELE;
 
   // Modèles alternés pour chaque transcript, pour qu'une variation de charge
@@ -333,11 +337,12 @@ async function main() {
     for (let run = 1; run <= RUNS_PAR_MODELE; run++) {
       for (const modele of MODELES) {
         log(`[${lignes.length + 1}/${total}] ${modele} · ${nom} · run ${run}…`);
-        const { ligne, plan } = await unRun(client, modele, nom, texte, run);
+        const { ligne, plan, fiche } = await unRun(client, modele, nom, texte, run);
         lignes.push(ligne);
         console.log(JSON.stringify(ligne));
         if (nom === "deux-heures.txt") {
           plans.set(modele, [...(plans.get(modele) ?? []), plan]);
+          fichesDeuxHeures.push({ modele, run, fiche });
         }
       }
     }
@@ -436,6 +441,12 @@ async function main() {
       console.log(`\n${m} · run ${i + 1} :`);
       console.log(plan.length ? plan.map((p, j) => `  ${j + 1}. ${p}`).join("\n") : "  (aucun plan)");
     });
+  }
+
+  console.log("\n=== Fiches complètes sur deux-heures.txt ===");
+  for (const { modele, run, fiche } of fichesDeuxHeures) {
+    console.log(`\n--- ${modele} · run ${run} ---`);
+    console.log(fiche ? JSON.stringify(fiche, null, 2) : "(aucune fiche exploitable)");
   }
 
   console.log("\n=== Citations rejetées par verifierSignaux (à lire à la main) ===");
