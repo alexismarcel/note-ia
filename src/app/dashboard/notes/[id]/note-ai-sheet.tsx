@@ -15,6 +15,9 @@ type Props = {
   // False once the ten free sheets are spent. The route refuses too; this only
   // spares the user a click that would fail.
   canGenerate: boolean;
+  // True once this recording has had its one generation (see
+  // 20261007100000_one_sheet_per_note.sql). The route refuses a second one.
+  alreadyGenerated: boolean;
   // Shown in the fiche's header and stats; all already known, none generated.
   matiere?: string;
   dureeSecondes?: number;
@@ -26,6 +29,7 @@ export default function NoteAiSheet({
   noteId,
   initialSheet,
   canGenerate,
+  alreadyGenerated,
   ...meta
 }: Props) {
   const router = useRouter();
@@ -34,6 +38,7 @@ export default function NoteAiSheet({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedSheet, setSavedSheet] = useState(initialSheet);
+  const [generated, setGenerated] = useState(alreadyGenerated);
 
   // `disabled` only takes effect on the next render, leaving a window where a
   // fast double-click fires two billed requests. A ref closes it synchronously.
@@ -55,12 +60,24 @@ export default function NoteAiSheet({
           "Tes 10 fiches gratuites sont utilisées. L'abonnement les débloque."
         );
       }
+      if (res.status === 409) {
+        // Generated in another tab since this page loaded.
+        setGenerated(true);
+        router.refresh();
+      }
       if (!res.ok) {
         throw new Error(body.error ?? `Échec de la génération (${res.status})`);
       }
       const fiche = parseFiche(body.sheet);
       if (!fiche) throw new Error("Réponse inattendue du serveur.");
+      setGenerated(true);
       setSheet(fiche);
+      // The route saves the sheet itself; the button below only appears if
+      // that save failed.
+      if (body.saved) {
+        setSavedSheet(fiche);
+        router.refresh();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur inconnue");
     } finally {
@@ -111,7 +128,7 @@ export default function NoteAiSheet({
       {!canGenerate && <QuotaLock reason="sheet_limit" />}
 
       <div className="flex flex-wrap items-center gap-3">
-        {canGenerate && (
+        {canGenerate && !generated && (
           <button
             onClick={generate}
             disabled={isGenerating}
@@ -135,6 +152,13 @@ export default function NoteAiSheet({
           <span className="text-sm text-ink-faint">Fiche enregistrée.</span>
         )}
       </div>
+
+      {generated && !sheet && (
+        <p className="text-sm text-ink-faint">
+          La fiche de cet enregistrement a déjà été générée. Une seule fiche est
+          possible par enregistrement.
+        </p>
+      )}
 
       {error && (
         <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>

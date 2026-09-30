@@ -64,7 +64,22 @@ export default async function NotePage({
   const course = courseRes.data;
 
   // ai_summary is jsonb: a string for markdown sheets, an object for fiches.
-  const sheet = toStoredSheet(note.ai_summary);
+  // The note's one generation, if it has had it. A "transcript too short"
+  // answer is kept here rather than in ai_summary, so it is shown again
+  // instead of the note looking like it still awaits its sheet.
+  const { data: generation, error: generationError } = await supabase
+    .from("note_sheet_generations")
+    .select("insufficient_message")
+    .eq("note_id", note.id)
+    .maybeSingle();
+  if (generationError) {
+    console.error("[note] generation lookup failed:", generationError);
+  }
+  const sheet =
+    toStoredSheet(note.ai_summary) ??
+    (generation?.insufficient_message
+      ? { suffisant: false as const, message: generation.insufficient_message }
+      : null);
   const transcript = note.content?.trim() ?? "";
   const wordCount = transcript ? transcript.split(/\s+/).length : 0;
 
@@ -134,6 +149,7 @@ export default async function NotePage({
         noteId={note.id}
         initialSheet={sheet}
         canGenerate={canGenerate}
+        alreadyGenerated={generation != null}
         matiere={subject?.name}
         // Null on notes recorded before durations were measured: no stat
         // beats a made-up one.
