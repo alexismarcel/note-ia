@@ -122,8 +122,9 @@ export default function FicheView({
         <div className="fic-rule" />
         <p>{fiche.message}</p>
         <p className="fic-vide-note">
-          L’enregistrement est conservé — tu peux relancer la génération après avoir
-          enregistré davantage de cours.
+          L’enregistrement est conservé, et cette tentative ne compte pas dans tes
+          fiches gratuites. Une seule génération est possible par enregistrement :
+          pour tes prochains cours, enregistre la séance en entier.
         </p>
       </div>
     );
