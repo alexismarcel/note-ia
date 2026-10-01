@@ -7,6 +7,10 @@ import { parseFiche } from "@/lib/fiche";
 import { DEFAULT_MODEL, ficheRequest } from "@/lib/fiche-generation";
 import { verifierSignaux } from "@/lib/verifierSignaux";
 import { nettoyerTranscript } from "@/lib/stt/nettoyerTranscript";
+import {
+  acquireRegeneration,
+  canRegenerateSheets,
+} from "@/lib/sheet-regeneration";
 
 export const dynamic = "force-dynamic";
 
@@ -90,10 +94,22 @@ export async function POST(
     return NextResponse.json({ error: START_FAILED }, { status: 503 });
   }
 
-  const { data: lockState, error: lockError } = await admin.rpc(
-    "acquire_sheet_generation",
-    { p_note_id: id, p_user_id: user.id }
-  );
+  // The accounts in sheet-regeneration.ts may generate a note again; their
+  // lock only refuses a generation still in progress.
+  let lockState: string | null = null;
+  let lockError: unknown = null;
+  if (canRegenerateSheets(user.email)) {
+    const result = await acquireRegeneration(admin, id, user.id);
+    if ("error" in result) lockError = result.error;
+    else lockState = result.state;
+  } else {
+    const { data, error } = await admin.rpc("acquire_sheet_generation", {
+      p_note_id: id,
+      p_user_id: user.id,
+    });
+    lockState = data;
+    lockError = error;
+  }
   if (lockError) {
     // Not a held lock — that is "in_progress" below — but the lock could not
     // be read or written at all: a missing or wrong SUPABASE_SECRET_KEY, or

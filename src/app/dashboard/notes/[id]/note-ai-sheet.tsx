@@ -18,6 +18,9 @@ type Props = {
   // True once this recording has had its one generation (see
   // 20261007100000_one_sheet_per_note.sql). The route refuses a second one.
   alreadyGenerated: boolean;
+  // True for the accounts in src/lib/sheet-regeneration.ts, which may
+  // generate the sheet again whatever alreadyGenerated says.
+  canRegenerate: boolean;
   // Shown in the fiche's header and stats; all already known, none generated.
   matiere?: string;
   dureeSecondes?: number;
@@ -30,6 +33,7 @@ export default function NoteAiSheet({
   initialSheet,
   canGenerate,
   alreadyGenerated,
+  canRegenerate,
   ...meta
 }: Props) {
   const router = useRouter();
@@ -130,13 +134,17 @@ export default function NoteAiSheet({
       {!canGenerate && <QuotaLock reason="sheet_limit" />}
 
       <div className="flex flex-wrap items-center gap-3">
-        {canGenerate && !generated && (
+        {canGenerate && (!generated || canRegenerate) && (
           <button
             onClick={generate}
             disabled={isGenerating}
             className="rounded-full bg-terracotta px-5 py-2.5 text-sm font-semibold text-cream transition-opacity hover:opacity-90 disabled:opacity-50"
           >
-            {isGenerating ? "Génération en cours…" : "Générer la fiche IA"}
+            {isGenerating
+              ? "Génération en cours…"
+              : generated || sheet
+                ? "Regénérer la fiche IA"
+                : "Générer la fiche IA"}
           </button>
         )}
 
@@ -155,7 +163,7 @@ export default function NoteAiSheet({
         )}
       </div>
 
-      {generated && !sheet && (
+      {generated && !sheet && !canRegenerate && (
         <p className="text-sm text-ink-faint">
           La fiche de cet enregistrement a déjà été générée. Une seule fiche est
           possible par enregistrement.
