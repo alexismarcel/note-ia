@@ -47,7 +47,7 @@ type PreviewedNote = {
   title: string;
   created_at: string;
   // From the note_previews view: the first 400 characters of a markdown
-  // sheet, or a text digest of a fiche object (its plan).
+  // sheet, or a text digest of a fiche object (its section titles).
   summary_preview: string | null;
   // The fiche's `titre`; null for markdown sheets, which carry it in their H1.
   summary_title: string | null;

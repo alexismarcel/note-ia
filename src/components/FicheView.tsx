@@ -24,15 +24,22 @@ export type Section = {
   blocs: Bloc[];
 };
 
+/** Une partie du cours. Presque toujours une seule par fiche ; plusieurs
+    quand l'enregistrement couvre des cours distincts. */
+export type Chapitre = {
+  titre: string;
+  sections: Section[];
+  prioritaire?: string[];
+};
+
 export type Fiche =
   | { suffisant: false; message: string }
   | {
       suffisant?: true;
       titre: string;
-      plan?: string[];
-      sections: Section[];
-      prioritaire?: string[];
+      chapitres: Chapitre[];
       pratique?: string[];
+      /** fiches d'avant les chapitres uniquement : l'IA ne l'écrit plus */
       reserves?: string[];
     };
 
@@ -53,7 +60,8 @@ const dureeLabel = (s: number) => {
   return h > 0 ? `${h} h ${String(m).padStart(2, '0')}` : `${m} min`;
 };
 
-const tousLesBlocs = (sections: Section[]) => sections.flatMap((s) => s.blocs);
+const tousLesBlocs = (chapitres: Chapitre[]) =>
+  chapitres.flatMap((c) => c.sections).flatMap((s) => s.blocs);
 
 const tempsLecture = (texte: string) =>
   Math.max(1, Math.round(texte.split(/\s+/).length / 200));
@@ -131,13 +139,13 @@ export default function FicheView({
   }
 
   const t = teinte(matiere);
-  const blocs = tousLesBlocs(fiche.sections);
+  const blocs = tousLesBlocs(fiche.chapitres);
   const nbSignales = blocs.filter((b) => b.marque === 'prof').length;
   const nbDefinitions = blocs.filter((b) => b.terme).length;
 
   const texteIntegral = [
     ...blocs.map((b) => `${b.terme ?? ''} ${b.texte}`),
-    ...(fiche.prioritaire ?? []),
+    ...fiche.chapitres.flatMap((c) => c.prioritaire ?? []),
     ...(fiche.pratique ?? []),
   ].join(' ');
 
@@ -193,22 +201,87 @@ export default function FicheView({
         </div>
       </div>
 
+      {/* Un seul chapitre (le cas normal) : rendu tel quel, sans titre de
+          chapitre, le titre de la fiche suffit. Plusieurs : chacun dans son
+          bloc, sous son propre grand titre, avec son plan numéroté à partir
+          de I et son « À retenir en priorité ». */}
+      {fiche.chapitres.length === 1 ? (
+        <ChapitreContenu
+          chapitre={fiche.chapitres[0]}
+          idBase={`${uid}-c0`}
+          libellePlan="Plan du cours"
+        />
+      ) : (
+        fiche.chapitres.map((c, ci) => (
+          <section key={`${c.titre}-${ci}`} className="fic-chap" aria-labelledby={`${uid}-c${ci}-titre`}>
+            <header className="fic-chap-head">
+              <span className="fic-chap-num">Chapitre {ci + 1}</span>
+              <h2 id={`${uid}-c${ci}-titre`} className="fic-chap-titre">
+                {rich(c.titre)}
+              </h2>
+            </header>
+            <ChapitreContenu chapitre={c} idBase={`${uid}-c${ci}`} libellePlan="Plan du chapitre" />
+          </section>
+        ))
+      )}
+
+      {/* informations pratiques — jamais mêlées au contenu académique */}
+      {!!fiche.pratique?.length && (
+        <section className="fic-pratique">
+          <h2 className="fic-label">Informations pratiques</h2>
+          <ul>
+            {fiche.pratique.map((p) => (
+              <li key={p}>{rich(p)}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* réserves sur le cours ou la transcription */}
+      {!!fiche.reserves?.length && (
+        <footer className="fic-reserves">
+          <h2 className="fic-label-sobre">Ce qui n’a pas été dit clairement</h2>
+          <ul>
+            {fiche.reserves.map((r) => (
+              <li key={r}>{rich(r)}</li>
+            ))}
+          </ul>
+        </footer>
+      )}
+    </article>
+  );
+}
+
+/* Plan numéroté, notes détaillées et « À retenir » d'un chapitre. La
+   numérotation repart de I à chaque chapitre ; idBase rend les ancres
+   uniques d'un chapitre à l'autre. */
+function ChapitreContenu({
+  chapitre,
+  idBase,
+  libellePlan,
+}: {
+  chapitre: Chapitre;
+  idBase: string;
+  libellePlan: string;
+}) {
+  return (
+    <>
       {/* plan du cours, numéroté à partir des sections elles-mêmes : il
           correspond toujours aux notes affichées en dessous, et chaque
-          entrée mène à sa section. Le champ plan du JSON n'est pas affiché. */}
-      {fiche.sections.length > 0 && (
-        <nav className="fic-sec" aria-label="Plan du cours">
-          <h2 className="fic-label">Plan du cours</h2>
+          entrée mène à sa section. */}
+      {chapitre.sections.length > 0 && (
+        <nav className="fic-sec" aria-label={libellePlan}>
+          <h2 className="fic-label">{libellePlan}</h2>
           <ol className="fic-plan">
-            {fiche.sections.map((s, i) => (
+            {chapitre.sections.map((s, i) => (
               <li key={`${s.titre}-${i}`}>
                 <a
-                  href={`#${uid}-s${i}`}
+                  href={`#${idBase}-s${i}`}
                   className="fic-plan-lien"
                   onClick={(e) => {
                     // scrollIntoView rather than the bare hash: useId's
                     // characters are not always safe in a URL fragment.
-                    const cible = document.getElementById(`${uid}-s${i}`);
+                    const cible = document.getElementById(`${idBase}-s${i}`);
                     if (!cible) return;
                     e.preventDefault();
                     const reduit = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -226,10 +299,10 @@ export default function FicheView({
 
       {/* notes détaillées */}
       <div className="fic-notes">
-        {fiche.sections.map((s, i) => {
+        {chapitre.sections.map((s, i) => {
           const n = s.niveau ?? 2;
           return (
-            <section key={`${s.titre}-${i}`} id={`${uid}-s${i}`} className={`fic-part fic-n${n}`}>
+            <section key={`${s.titre}-${i}`} id={`${idBase}-s${i}`} className={`fic-part fic-n${n}`}>
               {n === 2 ? (
                 <h2 className="fic-h2">{s.titre}</h2>
               ) : (
@@ -268,41 +341,17 @@ export default function FicheView({
       </div>
 
       {/* ce qu'il faut retenir en priorité — clôt le contenu académique */}
-      {!!fiche.prioritaire?.length && (
+      {!!chapitre.prioritaire?.length && (
         <section className="fic-prio">
           <h2 className="fic-label">À retenir en priorité</h2>
           <ul>
-            {fiche.prioritaire.map((p) => (
+            {chapitre.prioritaire.map((p) => (
               <li key={p}>{rich(p)}</li>
             ))}
           </ul>
         </section>
       )}
-
-      {/* informations pratiques — jamais mêlées au contenu académique */}
-      {!!fiche.pratique?.length && (
-        <section className="fic-pratique">
-          <h2 className="fic-label">Informations pratiques</h2>
-          <ul>
-            {fiche.pratique.map((p) => (
-              <li key={p}>{rich(p)}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* réserves sur le cours ou la transcription */}
-      {!!fiche.reserves?.length && (
-        <footer className="fic-reserves">
-          <h2 className="fic-label-sobre">Ce qui n’a pas été dit clairement</h2>
-          <ul>
-            {fiche.reserves.map((r) => (
-              <li key={r}>{rich(r)}</li>
-            ))}
-          </ul>
-        </footer>
-      )}
-    </article>
+    </>
   );
 }
 
@@ -354,6 +403,12 @@ const CSS = `
 
 /* notes détaillées */
 .fic-notes{display:flex;flex-direction:column;gap:28px}
+
+/* chapitres, quand la fiche en a plusieurs */
+.fic-chap{display:flex;flex-direction:column;gap:30px;padding-top:30px;border-top:2px solid var(--f-line)}
+.fic-chap-head{display:flex;flex-direction:column;gap:6px}
+.fic-chap-num{font-size:11.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--f-accent)}
+.fic-chap-titre{font-family:var(--f-display);font-size:clamp(23px,4.2vw,29px);font-weight:600;line-height:1.15;margin:0;text-wrap:balance;color:var(--f-deep)}
 .fic-part{display:flex;flex-direction:column;gap:14px;scroll-margin-top:24px}
 .fic-n3{padding-left:16px;border-left:1px solid var(--f-line);margin-top:-8px}
 .fic-h2{font-family:var(--f-display);font-size:21px;font-weight:600;line-height:1.25;margin:0;text-wrap:balance}

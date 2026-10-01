@@ -16,8 +16,8 @@ type Bloc = {
   signal?: string;
 };
 
-type FicheAvecSections = {
-  sections?: { blocs?: Bloc[] }[];
+type FicheAvecChapitres = {
+  chapitres?: { sections?: { blocs?: Bloc[] }[] }[];
   [k: string]: unknown;
 };
 
@@ -60,31 +60,33 @@ const citationPresente = (citation: string, transcript: string) => {
   return false;
 };
 
-export function verifierSignaux<T extends FicheAvecSections>(
+export function verifierSignaux<T extends FicheAvecChapitres>(
   fiche: T,
   transcript: string
 ): { fiche: T; rapport: RapportSignaux } {
   const base = normaliser(transcript);
   const rapport: RapportSignaux = { proposes: 0, confirmes: 0, retires: 0, rejets: [] };
 
-  for (const section of fiche.sections ?? []) {
-    for (const bloc of section.blocs ?? []) {
-      if (bloc.marque !== 'prof') continue;
+  const blocs = (fiche.chapitres ?? [])
+    .flatMap((chapitre) => chapitre.sections ?? [])
+    .flatMap((section) => section.blocs ?? []);
 
-      rapport.proposes++;
+  for (const bloc of blocs) {
+    if (bloc.marque !== 'prof') continue;
 
-      if (bloc.signal && citationPresente(bloc.signal, base)) {
-        rapport.confirmes++;
-        continue;
-      }
+    rapport.proposes++;
 
-      /* citation absente ou introuvable : le signalement saute.
-         Le contenu de la note, lui, est conservé tel quel. */
-      rapport.retires++;
-      rapport.rejets.push(bloc.signal ?? '(aucune citation fournie)');
-      delete bloc.marque;
-      delete bloc.signal;
+    if (bloc.signal && citationPresente(bloc.signal, base)) {
+      rapport.confirmes++;
+      continue;
     }
+
+    /* citation absente ou introuvable : le signalement saute.
+       Le contenu de la note, lui, est conservé tel quel. */
+    rapport.retires++;
+    rapport.rejets.push(bloc.signal ?? '(aucune citation fournie)');
+    delete bloc.marque;
+    delete bloc.signal;
   }
 
   return { fiche, rapport };
