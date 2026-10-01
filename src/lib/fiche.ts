@@ -66,7 +66,11 @@ const chapitreSchema = {
     sections: { type: "array", items: sectionSchema },
     prioritaire: stringList,
   } satisfies Record<keyof Chapitre, JsonSchema>,
-  required: ["titre", "sections"] satisfies RequiredKeys<Chapitre>[],
+  // prioritaire is optional on the type (sheets saved before chapters may
+  // lack it) but required of the model: left optional, it was simply never
+  // written, since the system prompt still describes it at the root, where
+  // the schema no longer allows it.
+  required: ["titre", "sections", "prioritaire"] satisfies (keyof Chapitre)[],
   additionalProperties: false,
 };
 
