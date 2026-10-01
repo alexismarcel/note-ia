@@ -263,14 +263,24 @@ async function unRun(
 
   const { fiche: verifiee, rapport } = verifierSignaux(lue, transcript);
   ligne.rapport_signaux = rapport;
-  ligne.nb_sections = verifiee.sections.length;
-  ligne.nb_blocs = verifiee.sections.reduce((n, s) => n + s.blocs.length, 0);
-  ligne.nb_prioritaire = verifiee.prioritaire?.length ?? 0;
+  const sections = verifiee.chapitres.flatMap((c) => c.sections);
+  ligne.nb_sections = sections.length;
+  ligne.nb_blocs = sections.reduce((n, s) => n + s.blocs.length, 0);
+  ligne.nb_prioritaire = verifiee.chapitres.reduce(
+    (n, c) => n + (c.prioritaire?.length ?? 0),
+    0
+  );
   // Après vérification : ce que l'app enregistrerait réellement.
-  ligne.nb_blocs_marque_prof = verifiee.sections
+  ligne.nb_blocs_marque_prof = sections
     .flatMap((s) => s.blocs)
     .filter((b) => b.marque === "prof").length;
-  plan = verifiee.plan ?? [];
+  // Le plan tel que l'app l'affiche : les titres des sections, précédés de
+  // celui du chapitre quand la fiche en a plusieurs.
+  plan = verifiee.chapitres.flatMap((c) =>
+    c.sections.map((s) =>
+      verifiee.chapitres.length > 1 ? `[${c.titre}] ${s.titre}` : s.titre
+    )
+  );
   return { ligne, plan, fiche: verifiee };
 }
 

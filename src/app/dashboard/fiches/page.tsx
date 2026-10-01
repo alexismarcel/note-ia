@@ -23,7 +23,7 @@ export default async function SheetsPage() {
   const supabase = await createClient();
 
   // Same as the recordings list: 400 characters of a markdown sheet, which
-  // still holds its opening "# Titre" line, or a fiche's plan with its title
+  // still holds its opening "# Titre" line, or a fiche's section titles with its title
   // alongside in summary_title — either way, the note's display title.
   const [notesRes, subjectRes, courseRes] = await Promise.all([
     supabase

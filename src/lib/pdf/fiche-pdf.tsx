@@ -8,7 +8,7 @@ import {
   View,
   renderToBuffer,
 } from "@react-pdf/renderer";
-import type { Bloc, Fiche } from "@/components/FicheView";
+import type { Bloc, Chapitre, Fiche } from "@/components/FicheView";
 import type { StoredSheet } from "@/lib/fiche";
 
 // The sheet as a real PDF file, built on the server so that "Télécharger en
@@ -124,6 +124,9 @@ const s = StyleSheet.create({
   reserves: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 12, marginTop: 18 },
   reserve: { fontSize: 9, color: C.faint, marginBottom: 4 },
   texteBrut: { fontSize: 10.5, lineHeight: 1.6 },
+  chap: { marginTop: 4 },
+  chapNum: { fontSize: 8.5, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", color: C.accent, marginBottom: 4 },
+  chapTitre: { fontFamily: "Fraunces", fontWeight: 600, fontSize: 18, lineHeight: 1.2, color: C.deep, marginBottom: 14 },
   pied: { position: "absolute", bottom: 26, left: 52, right: 52, fontSize: 8, color: C.faint, textAlign: "right" },
 });
 
@@ -192,18 +195,13 @@ function Liste({ items }: { items: string[] }) {
 
 type Meta = { matiere?: string; creeLe?: string };
 
-function FichePdf({ fiche, matiere, creeLe }: { fiche: Exclude<Fiche, { suffisant: false }> } & Meta) {
+function ChapitrePdf({ chapitre, libellePlan }: { chapitre: Chapitre; libellePlan: string }) {
   return (
     <>
-      {matiere && <Text style={s.matiere}>{matiere}</Text>}
-      <Text style={s.titre}>{fiche.titre}</Text>
-      <View style={s.rule} />
-      {creeLe ? <Text style={s.meta}>Généré le {dateCourte(creeLe)}</Text> : <View style={{ height: 14 }} />}
-
-      {fiche.sections.length > 0 && (
+      {chapitre.sections.length > 0 && (
         <View>
-          <Text style={s.label}>Plan du cours</Text>
-          {fiche.sections.map((sec, i) => (
+          <Text style={s.label}>{libellePlan}</Text>
+          {chapitre.sections.map((sec, i) => (
             <View key={i} style={s.planLigne}>
               <Text style={s.planNum}>{ROMAIN[i] ?? i + 1}.</Text>
               <Text style={s.blocCorps}>{sec.titre}</Text>
@@ -212,7 +210,7 @@ function FichePdf({ fiche, matiere, creeLe }: { fiche: Exclude<Fiche, { suffisan
         </View>
       )}
 
-      {fiche.sections.map((sec, i) => (
+      {chapitre.sections.map((sec, i) => (
         <View key={i}>
           {/* minPresenceAhead keeps a heading from ending a page alone */}
           <Text style={(sec.niveau ?? 2) === 2 ? s.h2 : s.h3} minPresenceAhead={40}>
@@ -224,11 +222,36 @@ function FichePdf({ fiche, matiere, creeLe }: { fiche: Exclude<Fiche, { suffisan
         </View>
       ))}
 
-      {!!fiche.prioritaire?.length && (
+      {!!chapitre.prioritaire?.length && (
         <View style={s.encadre} wrap={false}>
           <Text style={s.label}>À retenir en priorité</Text>
-          <Liste items={fiche.prioritaire} />
+          <Liste items={chapitre.prioritaire} />
         </View>
+      )}
+    </>
+  );
+}
+
+function FichePdf({ fiche, matiere, creeLe }: { fiche: Exclude<Fiche, { suffisant: false }> } & Meta) {
+  return (
+    <>
+      {matiere && <Text style={s.matiere}>{matiere}</Text>}
+      <Text style={s.titre}>{fiche.titre}</Text>
+      <View style={s.rule} />
+      {creeLe ? <Text style={s.meta}>Généré le {dateCourte(creeLe)}</Text> : <View style={{ height: 14 }} />}
+
+      {/* Same rule as FicheView: one chapter shows as before, several each
+          get a title, their own plan from I and their own priorities. */}
+      {fiche.chapitres.length === 1 ? (
+        <ChapitrePdf chapitre={fiche.chapitres[0]} libellePlan="Plan du cours" />
+      ) : (
+        fiche.chapitres.map((c, ci) => (
+          <View key={ci} style={s.chap} break={ci > 0}>
+            <Text style={s.chapNum}>Chapitre {ci + 1}</Text>
+            <Text style={s.chapTitre}>{c.titre}</Text>
+            <ChapitrePdf chapitre={c} libellePlan="Plan du chapitre" />
+          </View>
+        ))
       )}
 
       {!!fiche.pratique?.length && (

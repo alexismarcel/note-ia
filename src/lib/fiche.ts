@@ -1,4 +1,4 @@
-import type { Bloc, Fiche, Marque, Section } from "@/components/FicheView";
+import type { Bloc, Chapitre, Fiche, Marque, Section } from "@/components/FicheView";
 
 // The JSON schema sent to the model and the validator run on its answer, both
 // pinned to the types FicheView exports. Every `satisfies` below is there so
@@ -59,6 +59,21 @@ const sectionSchema = {
   additionalProperties: false,
 };
 
+const chapitreSchema = {
+  type: "object",
+  properties: {
+    titre: { type: "string" },
+    sections: { type: "array", items: sectionSchema },
+    prioritaire: stringList,
+  } satisfies Record<keyof Chapitre, JsonSchema>,
+  required: ["titre", "sections"] satisfies RequiredKeys<Chapitre>[],
+  additionalProperties: false,
+};
+
+// Kept on the type so sheets saved before chapters still show theirs, but
+// never asked of the model.
+type LegacyOnlyKeys = "reserves";
+
 // One flat object rather than an anyOf of the two answers: the structured
 // outputs docs only show object roots, and a root the API rejected would fail
 // every generation. `suffisant` is the only key both answers carry; which of
@@ -70,12 +85,9 @@ export const FICHE_JSON_SCHEMA: JsonSchema = {
     suffisant: { type: "boolean" },
     message: { type: "string" },
     titre: { type: "string" },
-    plan: stringList,
-    sections: { type: "array", items: sectionSchema },
-    prioritaire: stringList,
+    chapitres: { type: "array", items: chapitreSchema },
     pratique: stringList,
-    reserves: stringList,
-  } satisfies Record<KeysOfUnion<Fiche>, JsonSchema>,
+  } satisfies Record<Exclude<KeysOfUnion<Fiche>, LegacyOnlyKeys>, JsonSchema>,
   required: ["suffisant"],
   additionalProperties: false,
 };
@@ -131,9 +143,33 @@ function parseSection(v: unknown): Section | null {
   };
 }
 
+function parseSections(v: unknown): Section[] | null {
+  if (!Array.isArray(v)) return null;
+  const sections = v.map(parseSection);
+  return sections.some((s) => s === null) ? null : (sections as Section[]);
+}
+
+function parseChapitre(v: unknown): Chapitre | null {
+  if (!isRecord(v) || !isString(v.titre)) return null;
+  const sections = parseSections(v.sections);
+  const prioritaire = optionalStrings(v.prioritaire);
+  if (!sections || prioritaire === false) return null;
+  return {
+    titre: v.titre.trim(),
+    sections,
+    ...(prioritaire ? { prioritaire } : {}),
+  };
+}
+
 // Null when the value is not a fiche FicheView can render. Run on the model's
 // answer before it is returned, and on whatever is read back from the
 // database, since notes are also written straight from the browser.
+//
+// Sheets saved before chapters existed ({ titre, plan, sections,
+// prioritaire, pratique, reserves }) come back as a fiche with one chapter
+// named after the sheet, so every consumer only ever deals with chapters.
+// Their "plan" is dropped: the outline has been drawn from the sections for
+// a while.
 export function parseFiche(v: unknown): Fiche | null {
   if (!isRecord(v)) return null;
 
@@ -142,24 +178,28 @@ export function parseFiche(v: unknown): Fiche | null {
     return { suffisant: false, message: v.message } satisfies FicheInsuffisante;
   }
 
-  if (!isString(v.titre) || !v.titre.trim() || !Array.isArray(v.sections)) {
-    return null;
-  }
-  const sections = v.sections.map(parseSection);
-  if (sections.some((s) => s === null)) return null;
+  if (!isString(v.titre) || !v.titre.trim()) return null;
+  const titre = v.titre.trim();
 
-  const plan = optionalStrings(v.plan);
-  const prioritaire = optionalStrings(v.prioritaire);
+  let chapitres: Chapitre[];
+  if (Array.isArray(v.chapitres)) {
+    const parsed = v.chapitres.map(parseChapitre);
+    if (parsed.length === 0 || parsed.some((c) => c === null)) return null;
+    chapitres = parsed as Chapitre[];
+  } else {
+    const legacy = parseChapitre({ titre, sections: v.sections, prioritaire: v.prioritaire });
+    if (!legacy) return null;
+    chapitres = [legacy];
+  }
+
   const pratique = optionalStrings(v.pratique);
   const reserves = optionalStrings(v.reserves);
-  if ([plan, prioritaire, pratique, reserves].includes(false)) return null;
+  if (pratique === false || reserves === false) return null;
 
   return {
     suffisant: true,
-    titre: v.titre.trim(),
-    sections: sections as Section[],
-    ...(plan ? { plan } : {}),
-    ...(prioritaire ? { prioritaire } : {}),
+    titre,
+    chapitres,
     ...(pratique ? { pratique } : {}),
     ...(reserves ? { reserves } : {}),
   } satisfies FicheSuffisante;
