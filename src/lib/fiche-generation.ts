@@ -226,15 +226,10 @@ export function ficheRequest(
     // ceiling sits well above a long lecture's needs. Unused headroom is not
     // billed; it only guards against a runaway response.
     max_tokens: 16000,
-    // The prompt is identical on every call, so it is cached: a read costs
-    // a tenth of the input price. Each model has a minimum below which the
-    // marker is silently ignored (1 024 tokens on Sonnet 5, 4 096 on Haiku
-    // 4.5). cacheRead in the route's log shows whether this prompt clears it.
     system: [
       {
         type: "text",
         text: SYSTEM_PROMPT,
-        cache_control: { type: "ephemeral" },
       },
     ],
     messages: [{ role: "user", content: transcript }],
