@@ -11,27 +11,25 @@ export const canRegenerateSheets = isTestAccount;
 // progress (less than 10 minutes old) keeps the note, so two clicks still
 // cannot pay for two calls at once. The previous sheet stays in ai_summary
 // until the new one replaces it, so a failed attempt loses nothing.
+//
+// Delete then insert rather than one update: PostgREST rejects a PATCH whose
+// filter reads a column its body also sets (42703 "column ... does not
+// exist" on completed_at), which made every regeneration fail to start. Two
+// requests racing here both delete, and the primary key lets only one insert.
 export async function acquireRegeneration(
   admin: ReturnType<typeof createAdminClient>,
   noteId: string,
   userId: string
 ): Promise<{ state: "acquired" | "in_progress" } | { error: unknown }> {
   const expiredBefore = new Date(Date.now() - 10 * 60_000).toISOString();
-  const { data: taken, error: updateError } = await admin
+  const { error: deleteError } = await admin
     .from("note_sheet_generations")
-    .update({
-      generated_at: new Date().toISOString(),
-      user_id: userId,
-      completed_at: null,
-      insufficient_message: null,
-    })
+    .delete()
     .eq("note_id", noteId)
-    .or(`completed_at.not.is.null,generated_at.lt."${expiredBefore}"`)
-    .select("note_id");
-  if (updateError) return { error: updateError };
-  if (taken.length > 0) return { state: "acquired" };
+    .or(`completed_at.not.is.null,generated_at.lt."${expiredBefore}"`);
+  if (deleteError) return { error: deleteError };
 
-  // No row to take over: either none exists yet, or one is in progress.
+  // Whatever is left is a generation in progress.
   const { error: insertError } = await admin
     .from("note_sheet_generations")
     .insert({ note_id: noteId, user_id: userId });
