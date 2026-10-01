@@ -174,7 +174,14 @@ export default function NoteAiSheet({
         <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>
       )}
 
-      {sheet && <SheetContent sheet={sheet} {...meta} />}
+      {sheet && (
+        <SheetContent
+          sheet={sheet}
+          // The PDF is built from the saved sheet: none until it is saved.
+          noteId={hasUnsavedChanges ? undefined : noteId}
+          {...meta}
+        />
+      )}
     </section>
   );
 }
