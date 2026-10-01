@@ -75,7 +75,16 @@ export default function NoteAiSheet({
         throw new Error(body.error ?? `Échec de la génération (${res.status})`);
       }
       const fiche = parseFiche(body.sheet);
-      if (!fiche) throw new Error("Réponse inattendue du serveur.");
+      if (!fiche) {
+        // A sheet this page's code cannot read: the page was loaded before a
+        // deploy changed the sheet format. The route has saved it already,
+        // so a reload fetches the current code and shows it.
+        if (body.saved) {
+          window.location.reload();
+          return;
+        }
+        throw new Error("Réponse inattendue du serveur.");
+      }
       setGenerated(true);
       setSheet(fiche);
       // The route saves the sheet itself; the button below only appears if
