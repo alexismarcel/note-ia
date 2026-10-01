@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 // opening a print dialog. Read through the caller's own client, so RLS only
 // ever hands back their own notes.
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: RouteContext<"/api/notes/[id]/pdf">
 ) {
   const { id } = await params;
@@ -60,7 +60,12 @@ export async function GET(
   return new Response(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${ascii}.pdf"; filename*=UTF-8''${encodeURIComponent(nom)}.pdf`,
+      // ?inline=1 opens the PDF in the browser instead: iPhones ignore
+      // attachments in some contexts (apps' built-in browsers, home-screen
+      // web apps), while an opened PDF can always be shared or saved.
+      "Content-Disposition": `${
+        new URL(request.url).searchParams.has("inline") ? "inline" : "attachment"
+      }; filename="${ascii}.pdf"; filename*=UTF-8''${encodeURIComponent(nom)}.pdf`,
       "Cache-Control": "private, no-store",
     },
   });
