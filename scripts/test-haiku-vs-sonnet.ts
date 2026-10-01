@@ -2,6 +2,10 @@
  * Compare Haiku 4.5 et le modèle Sonnet sur la génération de fiches.
  *
  *   npx tsx scripts/test-haiku-vs-sonnet.ts
+ *   npx tsx scripts/test-haiku-vs-sonnet.ts une-heure-avec-signaux.txt
+ *
+ * Avec des noms de fichiers en argument, seuls ces transcripts sont testés
+ * (et seules les vérifications qui les concernent sont faites).
  *
  * 4 transcripts (test-transcripts/) × 2 modèles × 2 runs = 16 appels, avec
  * exactement la requête de l'app (src/lib/fiche-generation.ts : même prompt
@@ -56,6 +60,8 @@ const TRANSCRIPTS = [
   { fichier: "sans-signal-avec-astuces.txt", minutesAttendues: null },
 ] as const;
 const MOTS_PAR_MINUTE = 150;
+// Transcripts dont la fiche complète est affichée à la fin, pour la relire.
+const FICHES_AFFICHEES = ["une-heure-avec-signaux.txt", "deux-heures.txt"];
 
 type Ligne = {
   modele: string;
@@ -64,7 +70,9 @@ type Ligne = {
   json_valide: boolean;
   suffisant: boolean | null;
   nb_sections: number;
+  nb_blocs: number;
   nb_blocs_marque_prof: number;
+  nb_prioritaire: number;
   rapport_signaux: RapportSignaux;
   usage: {
     input_tokens: number;
@@ -194,7 +202,9 @@ async function unRun(
     json_valide: false,
     suffisant: null,
     nb_sections: 0,
+    nb_blocs: 0,
     nb_blocs_marque_prof: 0,
+    nb_prioritaire: 0,
     rapport_signaux: rapportVide(),
     usage: {
       input_tokens: 0,
@@ -254,6 +264,8 @@ async function unRun(
   const { fiche: verifiee, rapport } = verifierSignaux(lue, transcript);
   ligne.rapport_signaux = rapport;
   ligne.nb_sections = verifiee.sections.length;
+  ligne.nb_blocs = verifiee.sections.reduce((n, s) => n + s.blocs.length, 0);
+  ligne.nb_prioritaire = verifiee.prioritaire?.length ?? 0;
   // Après vérification : ce que l'app enregistrerait réellement.
   ligne.nb_blocs_marque_prof = verifiee.sections
     .flatMap((s) => s.blocs)
@@ -286,7 +298,16 @@ async function main() {
     process.exit(1);
   }
 
-  const textes = TRANSCRIPTS.map(({ fichier, minutesAttendues }) => {
+  const demandes = process.argv.slice(2).map((a) => path.basename(a));
+  const inconnus = demandes.filter((d) => !TRANSCRIPTS.some((t) => t.fichier === d));
+  if (inconnus.length) {
+    log(`Transcript(s) inconnu(s) : ${inconnus.join(", ")}. Choix : ${TRANSCRIPTS.map((t) => t.fichier).join(", ")}.`);
+    process.exit(1);
+  }
+  const choisis = TRANSCRIPTS.filter((t) => !demandes.length || demandes.includes(t.fichier));
+  const teste = (fichier: string) => choisis.some((t) => t.fichier === fichier);
+
+  const textes = choisis.map(({ fichier, minutesAttendues }) => {
     const chemin = path.join(RACINE, "test-transcripts", fichier);
     const texte = readFileSync(chemin, "utf8").trim();
     if (!texte) {
@@ -328,7 +349,7 @@ async function main() {
   const client = new Anthropic();
   const lignes: Ligne[] = [];
   const plans = new Map<string, string[][]>();
-  const fichesDeuxHeures: { modele: string; run: number; fiche: StoredSheet | null }[] = [];
+  const fiches: { transcript: string; modele: string; run: number; fiche: StoredSheet | null }[] = [];
   const total = textes.length * MODELES.length * RUNS_PAR_MODELE;
 
   // Modèles alternés pour chaque transcript, pour qu'une variation de charge
@@ -342,7 +363,9 @@ async function main() {
         console.log(JSON.stringify(ligne));
         if (nom === "deux-heures.txt") {
           plans.set(modele, [...(plans.get(modele) ?? []), plan]);
-          fichesDeuxHeures.push({ modele, run, fiche });
+        }
+        if (FICHES_AFFICHEES.includes(nom)) {
+          fiches.push({ transcript: nom, modele, run, fiche });
         }
       }
     }
@@ -366,29 +389,35 @@ async function main() {
 
     // Tout "prof" proposé sur un cours sans aucun signal est un faux
     // signalement, qu'il soit ensuite retiré par le filtre ou non.
-    const astuces = deModele(m, "sans-signal-avec-astuces.txt");
-    const faux = somme(astuces, "proposes");
-    const passes = somme(astuces, "confirmes");
-    // Zéro faux signalement ne prouve rien si aucune fiche n'a été produite.
-    const fichesAstuces = astuces.filter((l) => l.suffisant).length;
-    verifs.push({
-      ok: faux === 0 && fichesAstuces > 0,
-      texte:
-        `${m} : ${faux} faux signalement(s) sur sans-signal-avec-astuces.txt ` +
-        `(${passes} passé(s) malgré le filtre, ${fichesAstuces} fiche(s) produite(s))`,
-    });
+    if (teste("sans-signal-avec-astuces.txt")) {
+      const astuces = deModele(m, "sans-signal-avec-astuces.txt");
+      const faux = somme(astuces, "proposes");
+      const passes = somme(astuces, "confirmes");
+      // Zéro faux signalement ne prouve rien si aucune fiche n'a été produite.
+      const fichesAstuces = astuces.filter((l) => l.suffisant).length;
+      verifs.push({
+        ok: faux === 0 && fichesAstuces > 0,
+        texte:
+          `${m} : ${faux} faux signalement(s) sur sans-signal-avec-astuces.txt ` +
+          `(${passes} passé(s) malgré le filtre, ${fichesAstuces} fiche(s) produite(s))`,
+      });
+    }
 
-    const signaux = deModele(m, "une-heure-avec-signaux.txt");
-    verifs.push({
-      ok: signaux.every((l) => l.rapport_signaux.confirmes > 0),
-      texte: `${m} : au moins un signal confirmé sur chaque run de une-heure-avec-signaux.txt`,
-    });
+    if (teste("une-heure-avec-signaux.txt")) {
+      const signaux = deModele(m, "une-heure-avec-signaux.txt");
+      verifs.push({
+        ok: signaux.every((l) => l.rapport_signaux.confirmes > 0),
+        texte: `${m} : au moins un signal confirmé sur chaque run de une-heure-avec-signaux.txt`,
+      });
+    }
 
-    const long = deModele(m, "deux-heures.txt");
-    verifs.push({
-      ok: long.every((l) => l.suffisant === true),
-      texte: `${m} : fiche complète (suffisant) sur chaque run de deux-heures.txt`,
-    });
+    if (teste("deux-heures.txt")) {
+      const long = deModele(m, "deux-heures.txt");
+      verifs.push({
+        ok: long.every((l) => l.suffisant === true),
+        texte: `${m} : fiche complète (suffisant) sur chaque run de deux-heures.txt`,
+      });
+    }
   }
 
   console.log("\n=== Vérifications ===");
@@ -413,8 +442,10 @@ async function main() {
     return [
       m,
       `${Math.round((100 * valides) / tous.length)} %`,
-      String(somme(astuces, "proposes")),
-      `${somme(signaux, "proposes")} / ${somme(signaux, "confirmes")} / ${somme(signaux, "retires")}`,
+      teste("sans-signal-avec-astuces.txt") ? String(somme(astuces, "proposes")) : "non testé",
+      teste("une-heure-avec-signaux.txt")
+        ? `${somme(signaux, "proposes")} / ${somme(signaux, "confirmes")} / ${somme(signaux, "retires")}`
+        : "non testé",
       cout,
       `${duree.toFixed(1)} s`,
     ];
@@ -435,18 +466,51 @@ async function main() {
     )
   );
 
-  console.log("\n=== Plan trouvé sur deux-heures.txt (à vérifier à la main) ===");
-  for (const m of MODELES) {
-    (plans.get(m) ?? []).forEach((plan, i) => {
-      console.log(`\n${m} · run ${i + 1} :`);
-      console.log(plan.length ? plan.map((p, j) => `  ${j + 1}. ${p}`).join("\n") : "  (aucun plan)");
-    });
+  // Pour comparer deux versions du prompt : la longueur de la fiche (tokens
+  // de sortie) à côté de ce qu'elle contient, après verifierSignaux.
+  console.log("\n=== Longueur et contenu des fiches, par transcript ===");
+  console.log(
+    tableau(
+      ["Transcript", "Modèle", "Run", "Tokens de sortie", "Sections", "Blocs", "Prof confirmés", "Prioritaire"],
+      lignes.map((l) => [
+        l.transcript,
+        l.modele,
+        String(l.run),
+        String(l.usage.output_tokens),
+        String(l.nb_sections),
+        String(l.nb_blocs),
+        String(l.rapport_signaux.confirmes),
+        String(l.nb_prioritaire),
+      ])
+    )
+  );
+  console.log("\nMoyenne des tokens de sortie :");
+  for (const { fichier } of choisis) {
+    for (const m of MODELES) {
+      const ls = deModele(m, fichier).filter((l) => l.json_valide);
+      const moyenne = ls.length
+        ? Math.round(ls.reduce((s, l) => s + l.usage.output_tokens, 0) / ls.length)
+        : "n/d";
+      console.log(`  ${fichier} · ${m} : ${moyenne}`);
+    }
   }
 
-  console.log("\n=== Fiches complètes sur deux-heures.txt ===");
-  for (const { modele, run, fiche } of fichesDeuxHeures) {
-    console.log(`\n--- ${modele} · run ${run} ---`);
-    console.log(fiche ? JSON.stringify(fiche, null, 2) : "(aucune fiche exploitable)");
+  if (teste("deux-heures.txt")) {
+    console.log("\n=== Plan trouvé sur deux-heures.txt (à vérifier à la main) ===");
+    for (const m of MODELES) {
+      (plans.get(m) ?? []).forEach((plan, i) => {
+        console.log(`\n${m} · run ${i + 1} :`);
+        console.log(plan.length ? plan.map((p, j) => `  ${j + 1}. ${p}`).join("\n") : "  (aucun plan)");
+      });
+    }
+  }
+
+  for (const nom of FICHES_AFFICHEES.filter(teste)) {
+    console.log(`\n=== Fiches complètes sur ${nom} ===`);
+    for (const { modele, run, fiche } of fiches.filter((f) => f.transcript === nom)) {
+      console.log(`\n--- ${modele} · run ${run} ---`);
+      console.log(fiche ? JSON.stringify(fiche, null, 2) : "(aucune fiche exploitable)");
+    }
   }
 
   console.log("\n=== Citations rejetées par verifierSignaux (à lire à la main) ===");
