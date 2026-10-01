@@ -208,15 +208,16 @@ export default function FicheView({
         </nav>
       )}
 
-      {/* plan du cours */}
-      {!!fiche.plan?.length && (
+      {/* plan du cours, numéroté à partir des sections elles-mêmes : il
+          correspond toujours aux notes affichées en dessous */}
+      {fiche.sections.length > 0 && (
         <section className="fic-sec">
           <h2 className="fic-label">Plan du cours</h2>
           <ol className="fic-plan">
-            {fiche.plan.map((p, i) => (
-              <li key={p}>
+            {fiche.sections.map((s, i) => (
+              <li key={`${s.titre}-${i}`}>
                 <span className="fic-num">{ROMAIN[i] ?? i + 1}.</span>
-                <span>{rich(p)}</span>
+                <span>{rich(s.titre)}</span>
               </li>
             ))}
           </ol>
