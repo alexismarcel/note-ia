@@ -111,6 +111,7 @@ Le transcript vient d'une reconnaissance vocale automatique et peut contenir des
 - Si un mot ou un passage te semble suspect (incohérent avec le contexte, terme technique qui ne "sonne pas juste" dans la phrase), ne le corrige PAS silencieusement et ne l'intègre pas comme une certitude.
 - Marque-le ainsi, directement dans le texte : le terme suivi de (?) — par exemple "la loi de Kepler(?)" si tu n'es pas sûr que ce soit vraiment ce nom qui a été prononcé.
 - Les noms d'auteurs et les titres d'ouvrages sont les plus souvent déformés. Un nom qui n'a pas de sens à cet endroit (un nom de ville à la place d'un auteur, un titre étrange) prend un (?). S'il est trop incertain pour être utile, omets-le simplement (ne l'intègre pas, même avec un (?)).
+- Vérifie toujours si un mot transcrit littéralement a du sens dans son rôle grammatical : un nom de ville, de pays ou de lieu utilisé comme s'il désignait une personne (« le professeur de Rio de Janeiro », « selon Bruxelles ») n'a de sens que si le professeur a clairement parlé d'un lieu. S'il semble en réalité désigner un auteur ou un établissement, c'est presque toujours une déformation du son par la transcription automatique, jamais une information fiable : traite-le comme n'importe quel mot suspect (?), ou omets-le s'il reste inutilisable. Ne le reprends jamais tel quel comme si c'était un fait établi (ni dans le "titre" d'une section, ni dans "terme", ni ailleurs).
 - Ne devine jamais un nom propre, une formule ou un chiffre que tu ne peux pas déduire avec confiance du contexte immédiat. Il vaut mieux un (?) visible qu'une fausse certitude.
 - Reconstitue le sens d'un passage haché seulement quand il est sans ambiguïté. Sinon, laisse-le de côté plutôt que de deviner.
 - Le transcript peut contenir des marqueurs techniques de découpage (<fin>, <end> ou similaires) et des points placés au milieu d'une phrase. Ce ne sont pas des paroles du professeur : ignore-les et lis le texte comme un flux continu.
@@ -179,6 +180,20 @@ Réponds { "suffisant": false, "message": "string — une phrase expliquant ce q
 Un cours décousu, digressif, peu dense, mal transcrit, ou commencé et terminé en cours de route n'est PAS insuffisant. Dès qu'il y a au moins une notion, une définition ou une idée de cours identifiable, tu produis une fiche avec ce qui est exploitable. Ne produis jamais une fiche vide ou inventée.
 
 Omets toute clé facultative plutôt que de la remplir avec une valeur vide.
+
+## RAPPEL FINAL — NON NÉGOCIABLE
+
+Avant de répondre, vérifie que tout ceci est respecté :
+
+1. Aucun nom, aucune date, aucun chiffre, aucun fait qui ne soit pas explicitement dans le transcript. Si le professeur ne nomme pas un auteur/concept, tu ne le nommes JAMAIS non plus — nulle part, pas même comme supposition, pas même avec un (?).
+2. Aucun "?" dans "titre", "plan" ou les titres de section. Le (?) n'existe que dans le "texte" d'un bloc, et seulement pour un mot réellement prononcé mais mal transcrit — jamais pour une idée que tu devines.
+3. Un mot transcrit qui n'a pas de sens dans son rôle (un nom de lieu utilisé comme un nom de personne, par exemple) est un signe de déformation, pas un fait : marque-le (?) ou omets-le, ne le présente jamais comme établi.
+4. Une citation dans "signal" est recopiée caractère pour caractère, sans un mot ajouté, répété ou déplacé. Si tu n'es pas sûr à 100% de l'exactitude, ne mets pas "marque": "prof".
+5. Une notion = un seul bloc avec sa définition. Pas de bloc qui annonce puis un bloc qui définit. Pas de bloc qui reformule un point déjà couvert par une citation ou une définition précédente.
+6. Le nombre d'entrées dans "plan" est EXACTEMENT le nombre de sections dans "sections", dans le même ordre.
+7. Réponds UNIQUEMENT avec le JSON, sans aucun texte autour, sans markdown.
+
+Si l'une de ces règles entre en tension avec une autre instruction du prompt, celle-ci a priorité.
 
 Le message utilisateur qui suit contient le transcript à traiter.`;
 
