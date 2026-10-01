@@ -1,16 +1,10 @@
 import type { createAdminClient } from "@/lib/supabase/admin";
+import { isTestAccount } from "@/lib/test-accounts";
 
-// Accounts allowed to generate a recording's sheet again, past the one
+// The test accounts may generate a recording's sheet again, past the one
 // generation per note (20261007100000_one_sheet_per_note.sql) — to try a new
 // prompt on a real recording. Each generation is still a paid call.
-const SHEET_REGENERATION_EMAILS = ["alexismarcel89@gmail.com"];
-
-// Case-insensitive, like has_unlimited_access(): the address typed at sign-up
-// is not always the casing written here.
-export function canRegenerateSheets(email: string | null | undefined): boolean {
-  const normalized = email?.trim().toLowerCase();
-  return !!normalized && SHEET_REGENERATION_EMAILS.includes(normalized);
-}
+export const canRegenerateSheets = isTestAccount;
 
 // Same answers as acquire_sheet_generation() minus "done": a completed
 // generation is taken over like an expired one. A generation still in

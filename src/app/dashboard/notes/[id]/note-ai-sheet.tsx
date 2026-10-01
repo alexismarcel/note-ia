@@ -18,7 +18,7 @@ type Props = {
   // True once this recording has had its one generation (see
   // 20261007100000_one_sheet_per_note.sql). The route refuses a second one.
   alreadyGenerated: boolean;
-  // True for the accounts in src/lib/sheet-regeneration.ts, which may
+  // True for the accounts in src/lib/test-accounts.ts, which may
   // generate the sheet again whatever alreadyGenerated says.
   canRegenerate: boolean;
   // Shown in the fiche's header and stats; all already known, none generated.

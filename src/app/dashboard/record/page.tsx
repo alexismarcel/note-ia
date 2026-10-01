@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { readRecordingAllowance } from "@/lib/quota";
+import { isTestAccount } from "@/lib/test-accounts";
 import QuotaLock from "../quota-lock";
 import RecordClient from "./record-client";
 
@@ -34,7 +35,14 @@ export default async function RecordPage({
     );
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
-    <RecordClient prefill={{ subjectId: one(matiere), courseId: one(cours) }} />
+    <RecordClient
+      prefill={{ subjectId: one(matiere), courseId: one(cours) }}
+      canEditTranscript={isTestAccount(user?.email)}
+    />
   );
 }

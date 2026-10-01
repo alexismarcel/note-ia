@@ -53,7 +53,17 @@ function formatClock(ms: number): string {
   return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-export default function RecordClient({ prefill }: { prefill: Filing }) {
+export default function RecordClient({
+  prefill,
+  canEditTranscript,
+}: {
+  prefill: Filing;
+  // The test accounts (src/lib/test-accounts.ts) may edit the transcript, or
+  // paste one, once the recording is stopped — to try the sheet prompt on a
+  // course transcribed elsewhere. Only the screen differs: the note is saved
+  // exactly as a dictated one.
+  canEditTranscript: boolean;
+}) {
   const router = useRouter();
   const [status, setStatus] = useState<Status>("idle");
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -447,16 +457,27 @@ export default function RecordClient({ prefill }: { prefill: Filing }) {
         </p>
       )}
 
-      <div className="min-h-[200px] rounded-2xl border border-line-soft bg-white p-5 text-sm leading-relaxed text-ink">
-        {finalTranscript || interimTranscript ? (
-          <p>
-            {finalTranscript}{" "}
-            <span className="text-ink-faint">{interimTranscript}</span>
-          </p>
-        ) : (
-          <p className="text-ink-faint">La transcription s&apos;affichera ici…</p>
-        )}
-      </div>
+      {canEditTranscript && status === "stopped" ? (
+        <textarea
+          value={finalTranscript}
+          onChange={(e) => setFinalTranscript(e.target.value)}
+          placeholder="Colle ou corrige la transcription ici…"
+          aria-label="Transcription"
+          className="min-h-[200px] w-full rounded-2xl border border-line-soft bg-white p-5 text-sm leading-relaxed text-ink outline-none focus:border-terracotta"
+          rows={12}
+        />
+      ) : (
+        <div className="min-h-[200px] rounded-2xl border border-line-soft bg-white p-5 text-sm leading-relaxed text-ink">
+          {finalTranscript || interimTranscript ? (
+            <p>
+              {finalTranscript}{" "}
+              <span className="text-ink-faint">{interimTranscript}</span>
+            </p>
+          ) : (
+            <p className="text-ink-faint">La transcription s&apos;affichera ici…</p>
+          )}
+        </div>
+      )}
 
       {status === "stopped" && (
         <div className="flex gap-3">
