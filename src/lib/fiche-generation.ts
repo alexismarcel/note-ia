@@ -13,6 +13,10 @@ export const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 // accepts it. Matched by prefix so the dated ID and its alias both count.
 const REJECTS_EFFORT = ["claude-haiku-4-5"];
 
+// The reverse for temperature: Haiku 4.5 accepts it, while Sonnet 5 and the
+// Opus/Fable models from 4.7 on reject any sampling parameter with a 400.
+const ACCEPTS_TEMPERATURE = ["claude-haiku-4-5"];
+
 // Kept free of any per-note content: prompt caching is a prefix match, so
 // interpolating the transcript here would change the prefix on every call and
 // guarantee a cache miss. The transcript goes in the user message instead.
@@ -185,8 +189,13 @@ export function ficheRequest(
   const acceptsEffort = !REJECTS_EFFORT.some((prefix) =>
     model.startsWith(prefix)
   );
+  const acceptsTemperature = ACCEPTS_TEMPERATURE.some((prefix) =>
+    model.startsWith(prefix)
+  );
   return {
     model,
+    // Low, so the same transcript gives nearly the same sheet each time.
+    ...(acceptsTemperature ? { temperature: 0.2 } : {}),
     // The format constrains decoding to FICHE_JSON_SCHEMA, so the answer
     // always parses: a malformed reply can no longer cost a second call.
     output_config: {
