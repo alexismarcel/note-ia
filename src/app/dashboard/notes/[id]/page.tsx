@@ -4,6 +4,7 @@ import { isAuthFailure } from "@/lib/supabase/auth-error";
 import { createClient } from "@/lib/supabase/server";
 import { formatNoteDate, noteDisplayTitle } from "@/lib/notes/title";
 import { toStoredSheet } from "@/lib/fiche";
+import { canRegenerateSheets } from "@/lib/sheet-regeneration";
 import CoursePicker from "../../course-picker";
 import NoteAiSheet from "./note-ai-sheet";
 
@@ -91,6 +92,13 @@ export default async function NotePage({
       "is_subscribed, is_unlimited, free_sheets_used, free_sheet_allowance"
     )
     .single();
+  // Only decides whether the button is shown; the route checks the account
+  // again before generating.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const canRegenerate = canRegenerateSheets(user?.email);
+
   const canGenerate =
     usageRows?.is_unlimited === true ||
     usageRows?.is_subscribed === true ||
@@ -152,6 +160,7 @@ export default async function NotePage({
         // Only a completed generation closes the note for good; one still in
         // progress expires on its own, and the route answers a click on it.
         alreadyGenerated={generation?.completed_at != null}
+        canRegenerate={canRegenerate}
         matiere={subject?.name}
         // Null on notes recorded before durations were measured: no stat
         // beats a made-up one.
