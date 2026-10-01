@@ -141,10 +141,6 @@ export default function FicheView({
     ...(fiche.pratique ?? []),
   ].join(' ');
 
-  const ancres = fiche.sections
-    .map((s, i) => ({ ...s, id: `${uid}-s${i}` }))
-    .filter((s) => (s.niveau ?? 2) === 2);
-
   return (
     <article className="fic">
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
@@ -197,31 +193,35 @@ export default function FicheView({
         </div>
       </div>
 
-      {/* sommaire, déduit des grandes parties */}
-      {ancres.length >= 3 && (
-        <nav className="fic-somm" aria-label="Sommaire">
-          {ancres.map((s) => (
-            <a key={s.id} href={`#${s.id}`} className="fic-somm-chip">
-              {s.titre}
-            </a>
-          ))}
-        </nav>
-      )}
-
       {/* plan du cours, numéroté à partir des sections elles-mêmes : il
-          correspond toujours aux notes affichées en dessous */}
+          correspond toujours aux notes affichées en dessous, et chaque
+          entrée mène à sa section. Le champ plan du JSON n'est pas affiché. */}
       {fiche.sections.length > 0 && (
-        <section className="fic-sec">
+        <nav className="fic-sec" aria-label="Plan du cours">
           <h2 className="fic-label">Plan du cours</h2>
           <ol className="fic-plan">
             {fiche.sections.map((s, i) => (
               <li key={`${s.titre}-${i}`}>
-                <span className="fic-num">{ROMAIN[i] ?? i + 1}.</span>
-                <span>{rich(s.titre)}</span>
+                <a
+                  href={`#${uid}-s${i}`}
+                  className="fic-plan-lien"
+                  onClick={(e) => {
+                    // scrollIntoView rather than the bare hash: useId's
+                    // characters are not always safe in a URL fragment.
+                    const cible = document.getElementById(`${uid}-s${i}`);
+                    if (!cible) return;
+                    e.preventDefault();
+                    const reduit = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                    cible.scrollIntoView({ behavior: reduit ? 'auto' : 'smooth', block: 'start' });
+                  }}
+                >
+                  <span className="fic-num">{ROMAIN[i] ?? i + 1}.</span>
+                  <span>{rich(s.titre)}</span>
+                </a>
               </li>
             ))}
           </ol>
-        </section>
+        </nav>
       )}
 
       {/* notes détaillées */}
@@ -341,15 +341,15 @@ const CSS = `
 .fic-prio li::before{content:'';flex:none;width:6px;height:6px;border-radius:50%;background:var(--f-accent);margin-top:8px}
 
 /* sommaire */
-.fic-somm{display:flex;flex-wrap:wrap;gap:7px}
-.fic-somm-chip{border:1px solid var(--f-line);border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:500;color:var(--f-muted);text-decoration:none;transition:border-color .16s ease,color .16s ease}
-.fic-somm-chip:hover{border-color:var(--f-accent);color:var(--f-deep)}
-.fic-somm-chip:focus-visible{outline:2px solid var(--f-accent);outline-offset:2px}
 
 /* plan */
 .fic-sec{display:flex;flex-direction:column;gap:13px}
 .fic-plan{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px}
-.fic-plan li{display:flex;gap:13px;font-size:15.5px;line-height:1.5}
+.fic-plan li{font-size:15.5px;line-height:1.5}
+.fic-plan-lien{display:flex;gap:13px;color:inherit;text-decoration:none;border-radius:6px;transition:color .16s ease}
+.fic-plan-lien:hover{color:var(--f-deep)}
+.fic-plan-lien:hover>span:last-child{text-decoration:underline;text-underline-offset:3px}
+.fic-plan-lien:focus-visible{outline:2px solid var(--f-accent);outline-offset:3px}
 .fic-num{flex:none;font-family:var(--f-display);font-size:14px;font-weight:700;color:var(--f-deep);min-width:28px;padding-top:1px;font-variant-numeric:tabular-nums}
 
 /* notes détaillées */
@@ -406,7 +406,6 @@ const CSS = `
 
 @media print{
   .fic{max-width:none;padding:0;gap:22px}
-  .fic-somm{display:none}
   .fic-part,.fic-prio,.fic-pratique,.fic-bloc{break-inside:avoid}
 }
 `;
