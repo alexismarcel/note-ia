@@ -11,6 +11,7 @@ import {
   acquireRegeneration,
   canRegenerateSheets,
 } from "@/lib/sheet-regeneration";
+import { isTestAccount } from "@/lib/test-accounts";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,19 @@ const PRICES: Record<
   "claude-haiku-4-5": { input: 1e-6, output: 5e-6, cacheWrite: 1.25e-6, cacheRead: 1e-7 },
   "claude-sonnet-5": { input: 2e-6, output: 1e-5, cacheWrite: 2.5e-6, cacheRead: 2e-7 },
 };
+
+// "42703 column … does not exist" for a Supabase error, the message for
+// anything else.
+function describe(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === "object") {
+    const { code, message } = e as { code?: unknown; message?: unknown };
+    if (typeof message === "string") {
+      return typeof code === "string" ? `${code} ${message}` : message;
+    }
+  }
+  return String(e);
+}
 
 const priceFor = (model: string) =>
   Object.entries(PRICES).find(([prefix]) => model.startsWith(prefix))?.[1];
@@ -78,6 +92,15 @@ export async function POST(
     );
   }
 
+  // Every other account sees START_FAILED alone; the test accounts also get
+  // the cause, so a failure can be diagnosed from the app without the logs.
+  const showCause = isTestAccount(user.email);
+  const startFailed = (cause: string) =>
+    NextResponse.json(
+      { error: showCause ? `${START_FAILED} [${cause}]` : START_FAILED },
+      { status: 503 }
+    );
+
   // One sheet per recording: each generation is a paid call, and nothing else
   // stops subscribers and unlimited accounts from generating again and again.
   // acquire_sheet_generation() takes the note's lock atomically, as the
@@ -91,7 +114,7 @@ export async function POST(
     admin = createAdminClient();
   } catch (err) {
     console.error("[summary] admin client unavailable:", err);
-    return NextResponse.json({ error: START_FAILED }, { status: 503 });
+    return startFailed(`client admin : ${describe(err)}`);
   }
 
   // The accounts in sheet-regeneration.ts may generate a note again; their
@@ -115,7 +138,7 @@ export async function POST(
     // be read or written at all: a missing or wrong SUPABASE_SECRET_KEY, or
     // the migration not applied. The details are for the logs.
     console.error("[summary] lock failed:", lockError);
-    return NextResponse.json({ error: START_FAILED }, { status: 503 });
+    return startFailed(`verrou : ${describe(lockError)}`);
   }
   if (lockState === "done") {
     return NextResponse.json(
@@ -154,7 +177,7 @@ export async function POST(
     );
     if (claimError) {
       console.error("[summary] claim_sheet_generation failed:", claimError);
-      return NextResponse.json({ error: START_FAILED }, { status: 503 });
+      return startFailed(`quota : ${describe(claimError)}`);
     }
     const claim = (Array.isArray(claimRows) ? claimRows[0] : claimRows) as
       | SheetClaim
@@ -170,7 +193,7 @@ export async function POST(
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       console.error("[summary] ANTHROPIC_API_KEY is not configured");
-      return NextResponse.json({ error: START_FAILED }, { status: 503 });
+      return startFailed("ANTHROPIC_API_KEY absente");
     }
 
     // Bounded well under the lock's 10-minute expiry: with the SDK's default
@@ -188,7 +211,7 @@ export async function POST(
     } catch (err) {
       if (err instanceof Anthropic.AuthenticationError) {
         console.error("[summary] Anthropic authentication failed:", err.message);
-        return NextResponse.json({ error: START_FAILED }, { status: 503 });
+        return startFailed(`clé Anthropic refusée : ${err.message}`);
       }
       if (err instanceof Anthropic.RateLimitError) {
         return NextResponse.json(
