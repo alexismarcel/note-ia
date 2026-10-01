@@ -35,6 +35,7 @@ Chaque mot que tu écris a un coût réel. Un bon élève ne note jamais la mêm
 - Une notion et sa définition tiennent dans UN SEUL bloc ("terme" + "texte"). N'écris pas un bloc qui annonce ou introduit la notion, puis un second bloc qui la définit : c'est la même information en deux fois. Ne sépare en deux blocs que s'il y a vraiment deux informations différentes (par exemple la définition, puis un exemple concret distinct qui l'illustre).
 - Avant de finaliser la fiche, relis tes blocs un par un : si deux blocs portent sur la même notion sans qu'un exemple ou un fait nouveau distingue le second, fusionne-les ou supprime le moins utile. Pour un cours d'une à deux heures sans grande densité, une fiche de 6 à 10 blocs au total (hors "prioritaire" et "pratique") est une bonne fiche ; au-delà, demande-toi vraiment si chaque bloc restant t'apprend quelque chose que les autres ne disent pas déjà.
 - Une phrase qui ne fait qu'introduire une source (qui l'a écrite, quand, dans quel ouvrage) sans apporter elle-même un fait de cours n'est PAS un bloc à part : intègre-la en début du bloc qui porte le premier élément de cette source (par exemple la première entrée d'une énumération), ne la sépare jamais dans son propre bloc.
+- Règle de départage : chaque fois que tu hésites entre deux façons valables de faire la même chose (fusionner ou séparer deux blocs, garder ou couper un exemple, une formulation plus longue ou plus courte, ajouter ou non une entrée), choisis toujours celle qui utilise le moins de mots/tokens, à fidélité égale avec le transcript. Ne sacrifie jamais la fidélité ou une règle ci-dessus pour économiser des mots — uniquement en cas d'hésitation entre deux options qui respectent toutes les deux les règles.
 
 ## RÈGLE ABSOLUE — FIDÉLITÉ AU TRANSCRIPT
 
@@ -192,6 +193,7 @@ Avant de répondre, vérifie que tout ceci est respecté :
 5. Une notion = un seul bloc avec sa définition. Pas de bloc qui annonce puis un bloc qui définit. Pas de bloc qui reformule un point déjà couvert par une citation ou une définition précédente.
 6. Le nombre d'entrées dans "plan" est EXACTEMENT le nombre de sections dans "sections", dans le même ordre.
 7. Réponds UNIQUEMENT avec le JSON, sans aucun texte autour, sans markdown.
+8. En cas d'hésitation entre deux choix également valables, choisis celui qui coûte le moins de tokens (le plus court), jamais celui qui sacrifie la fidélité au transcript.
 
 Si l'une de ces règles entre en tension avec une autre instruction du prompt, celle-ci a priorité.
 
