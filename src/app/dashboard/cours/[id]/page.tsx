@@ -168,6 +168,7 @@ export default async function CoursePage({
                 <div className="mt-3">
                   <SheetContent
                     sheet={note.sheet!}
+                    noteId={note.id}
                     matiere={subjectName ?? undefined}
                     creeLe={note.created_at}
                   />

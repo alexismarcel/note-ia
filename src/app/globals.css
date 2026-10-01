@@ -85,11 +85,3 @@ body {
   /* Was hardcoded to Arial, which overrode the loaded webfonts entirely. */
   font-family: var(--font-sans), system-ui, sans-serif;
 }
-
-/* "Télécharger en PDF" (src/app/dashboard/sheet-download-button.tsx) marks
-   everything that is not the sheet just before printing. */
-@media print {
-  [data-print-hide] {
-    display: none !important;
-  }
-}
